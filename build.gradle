@@ -45,7 +45,7 @@ tasks.named('classes') {
     dependsOn tasks.named('processUiResources')
 }
 
-tasks.named('generatePluginComponentsIdx') {·
+tasks.named('generatePluginComponentsIdx') {
     notCompatibleWithConfigurationCache('This task invokes "Task.project" at execution time, which is not supported with configuration cache.')
 }
 

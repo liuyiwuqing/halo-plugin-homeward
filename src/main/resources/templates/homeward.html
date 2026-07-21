@@ -3,17 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>归航寻亲</title>
+    <meta
+      name="description"
+      content="归航寻亲公益信息平台，展示经过整理的寻亲档案，并为知情者提供安全的线索提交渠道。"
+    />
+    <title>归航寻亲｜让回家的路被更多人看见</title>
     <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-public.css" />
   </head>
   <body class="homeward-public-body">
+    <a class="homeward-skip-link" href="#homeward-page-content">跳到寻人档案</a>
     <main id="homeward-page" class="homeward-page">
       <section class="homeward-hero">
-        <p class="homeward-kicker">公益寻亲</p>
-        <h1>归航寻亲</h1>
-        <p>每一次迷路，都值得被照亮。</p>
+        <div class="homeward-hero__inner">
+          <div class="homeward-brand" aria-label="归航寻亲公益项目">
+            <span class="homeward-brand__mark" aria-hidden="true">
+              <svg viewBox="0 0 48 48" role="presentation">
+                <path d="M24 42c8-7.2 13-13.8 13-21A13 13 0 0 0 11 21c0 7.2 5 13.8 13 21Z" />
+                <circle cx="24" cy="21" r="5" />
+                <path d="M5 41c6-3.5 12-3.5 18 0s12 3.5 20 0" />
+              </svg>
+            </span>
+            <span>归航寻亲</span>
+          </div>
+
+          <div class="homeward-hero__copy">
+            <p class="homeward-kicker">公益寻亲信息平台</p>
+            <h1>让每一条<br /><em>回家的路</em><br />被更多人看见</h1>
+            <p class="homeward-hero__lead">
+              一次转发，也许就是一次重逢的开始。请留意照片与特征，如有可靠信息，请通过页面安全提交。
+            </p>
+          </div>
+
+          <dl class="homeward-hero__principles" aria-label="平台原则">
+            <div><dt>01</dt><dd>保护隐私</dd></div>
+            <div><dt>02</dt><dd>人工核验</dd></div>
+            <div><dt>03</dt><dd>公益互助</dd></div>
+          </dl>
+        </div>
       </section>
-      <section id="homeward-page-content" class="homeward-section" aria-live="polite"></section>
+      <section
+        id="homeward-page-content"
+        class="homeward-section"
+        aria-live="polite"
+        aria-busy="true"
+        tabindex="-1"
+      >
+        <span class="homeward-sr-only" role="status">正在加载寻人档案</span>
+        <div class="homeward-loading" aria-hidden="true">
+          <div class="homeward-loading__heading"></div>
+          <div class="homeward-loading__grid">
+            <div></div><div></div><div></div>
+          </div>
+        </div>
+      </section>
     </main>
     <script>
       window.__HOMEWARD_PAGE__ = true;

@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { VButton, VEmpty, VLoading, VTabbar, VTag } from '@halo-dev/components'
+import { onMounted, ref } from 'vue'
+import { VButton, VLoading } from '@halo-dev/components'
+import RiAddLine from '~icons/ri/add-line'
+import RiChatCheckLine from '~icons/ri/chat-check-line'
+import RiDashboard3Line from '~icons/ri/dashboard-3-line'
+import RiExternalLinkLine from '~icons/ri/external-link-line'
+import RiFileUserLine from '~icons/ri/file-user-line'
+import RiHeartPulseLine from '~icons/ri/heart-pulse-line'
+import RiRefreshLine from '~icons/ri/refresh-line'
+import RiWindowLine from '~icons/ri/window-line'
 import {
   deleteCase,
   deleteClue,
@@ -19,14 +27,23 @@ import type {
   MissingPersonCasePayload,
   MissingPersonCaseVO,
 } from '@/type'
+import CaseEditorModal from '@/components/CaseEditorModal.vue'
+import ConfirmActionModal from '@/components/ConfirmActionModal.vue'
+import ClueDetailModal from '@/components/ClueDetailModal.vue'
+import DashboardOverview from '@/components/DashboardOverview.vue'
+import CaseListPanel from '@/components/CaseListPanel.vue'
+import ClueListPanel from '@/components/ClueListPanel.vue'
 
 type TabKey = 'overview' | 'cases' | 'clues' | 'preview'
 
 const activeTab = ref<TabKey>('overview')
 const loading = ref(false)
+const loadError = ref('')
 const message = ref('')
 const caseKeyword = ref('')
 const clueKeyword = ref('')
+const caseStatusFilter = ref<'ALL' | CaseStatus>('ALL')
+const clueStatusFilter = ref<'ALL' | ClueStatus>('ALL')
 const cases = ref<MissingPersonCaseVO[]>([])
 const clues = ref<ClueReportVO[]>([])
 const stats = ref<DashboardStats>({
@@ -36,40 +53,25 @@ const stats = ref<DashboardStats>({
   pendingClues: 0,
 })
 
-const caseForm = reactive<MissingPersonCaseVO>({
-  status: 'DRAFT',
-  priority: 0,
-})
+const caseEditorVisible = ref(false)
+const editingCase = ref<MissingPersonCaseVO | null>(null)
+const caseSaving = ref(false)
+const caseSaveError = ref('')
+const pendingDeleteCase = ref<MissingPersonCaseVO | null>(null)
+const deletingCase = ref(false)
+const caseActionName = ref('')
+const selectedClue = ref<ClueReportVO | null>(null)
+const clueSaving = ref(false)
+const clueSaveError = ref('')
+const pendingDeleteClue = ref<ClueReportVO | null>(null)
+const deletingClue = ref(false)
 
-const editingCaseName = ref('')
-
-const tabs: Array<{ id: TabKey; label: string }> = [
-  { id: 'overview', label: '概览' },
-  { id: 'cases', label: '寻亲案例' },
-  { id: 'clues', label: '线索处理' },
-  { id: 'preview', label: '404 预览' },
+const tabs = [
+  { id: 'overview' as const, label: '概览', icon: RiDashboard3Line },
+  { id: 'cases' as const, label: '寻亲案例', icon: RiFileUserLine },
+  { id: 'clues' as const, label: '线索处理', icon: RiChatCheckLine },
+  { id: 'preview' as const, label: '公益页预览', icon: RiWindowLine },
 ]
-
-const statusLabels: Record<CaseStatus, string> = {
-  DRAFT: '草稿',
-  PUBLISHED: '已发布',
-  FOUND: '已找到',
-  ARCHIVED: '已归档',
-}
-
-const clueStatusLabels: Record<ClueStatus, string> = {
-  PENDING: '待处理',
-  CONTACTED: '已联系',
-  INVALID: '无效',
-  RESOLVED: '已解决',
-}
-
-const statCards = computed(() => [
-  { label: '全部案例', value: stats.value.totalCases },
-  { label: '已发布', value: stats.value.publishedCases },
-  { label: '已团圆', value: stats.value.foundCases },
-  { label: '待处理线索', value: stats.value.pendingClues },
-])
 
 function setMessage(value: string) {
   message.value = value
@@ -82,6 +84,7 @@ function setMessage(value: string) {
 
 async function refreshAll() {
   loading.value = true
+  loadError.value = ''
   try {
     const [statsResult, caseResult, clueResult] = await Promise.all([
       getDashboardStats(),
@@ -91,83 +94,124 @@ async function refreshAll() {
     stats.value = statsResult
     cases.value = caseResult.items || []
     clues.value = clueResult.items || []
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '数据加载失败，请检查网络后重试'
   } finally {
     loading.value = false
   }
 }
 
 function editCase(item: MissingPersonCaseVO) {
-  editingCaseName.value = item.name || ''
-  Object.assign(caseForm, item)
-  activeTab.value = 'cases'
+  editingCase.value = item
+  caseSaveError.value = ''
+  caseEditorVisible.value = true
 }
 
-function resetCaseForm() {
-  editingCaseName.value = ''
-  Object.assign(caseForm, {
-    slug: '',
-    title: '',
-    personName: '',
-    gender: '',
-    birthDate: '',
-    missingDate: '',
-    missingAge: undefined,
-    currentAge: undefined,
-    missingLocation: '',
-    hometown: '',
-    coverImage: '',
-    physicalFeatures: '',
-    description: '',
-    contactName: '',
-    contactPhone: '',
-    sourceName: '',
-    sourceUrl: '',
-    status: 'DRAFT',
-    priority: 0,
-  })
+function createCase() {
+  editingCase.value = null
+  caseSaveError.value = ''
+  caseEditorVisible.value = true
 }
 
-async function submitCase() {
+function closeCaseEditor() {
+  if (caseSaving.value) return
+  caseEditorVisible.value = false
+}
+
+async function submitCase(formValue: MissingPersonCaseVO) {
   const payload: MissingPersonCasePayload = {
-    metadata: editingCaseName.value ? { name: editingCaseName.value } : undefined,
-    spec: { ...caseForm },
+    metadata: editingCase.value?.name ? { name: editingCase.value.name } : undefined,
+    spec: { ...formValue },
   }
-  await saveCase(payload)
-  resetCaseForm()
-  await refreshAll()
-  setMessage('案例已保存')
+  caseSaving.value = true
+  caseSaveError.value = ''
+  try {
+    await saveCase(payload)
+    caseEditorVisible.value = false
+    await refreshAll()
+    setMessage(editingCase.value?.name ? '案例修改已保存' : '新案例已保存')
+  } catch (error) {
+    caseSaveError.value = error instanceof Error ? error.message : '保存失败，请稍后重试'
+  } finally {
+    caseSaving.value = false
+  }
 }
 
-async function changeCaseStatus(name: string | undefined, action: 'publish' | 'archive' | 'mark-found') {
-  if (!name) return
-  await updateCaseStatus(name, action)
-  await refreshAll()
-  setMessage('案例状态已更新')
-}
-
-async function removeCase(name: string | undefined) {
-  if (!name) return
-  await deleteCase(name)
-  await refreshAll()
-  setMessage('案例已删除')
-}
-
-async function changeClueStatus(item: ClueReportVO, status: ClueStatus) {
+async function changeCaseStatus(
+  item: MissingPersonCaseVO,
+  action: 'publish' | 'archive' | 'mark-found',
+) {
   if (!item.name) return
-  await updateClueStatus(item.name, {
-    status,
-    handler: 'admin',
-    processNote: item.processNote,
-  })
-  await refreshAll()
-  setMessage('线索状态已更新')
+  caseActionName.value = item.name
+  try {
+    await updateCaseStatus(item.name, action)
+    await refreshAll()
+    setMessage('案例状态已更新')
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '状态更新失败，请稍后重试'
+  } finally {
+    caseActionName.value = ''
+  }
 }
 
-async function removeClue(name: string | undefined) {
+function requestCaseDelete(item: MissingPersonCaseVO) {
+  pendingDeleteCase.value = item
+}
+
+async function confirmCaseDelete() {
+  const name = pendingDeleteCase.value?.name
   if (!name) return
-  await deleteClue(name)
-  await refreshAll()
-  setMessage('线索已删除')
+  deletingCase.value = true
+  try {
+    await deleteCase(name)
+    pendingDeleteCase.value = null
+    await refreshAll()
+    setMessage('案例已删除')
+  } finally {
+    deletingCase.value = false
+  }
+}
+
+function openClue(item: ClueReportVO) {
+  selectedClue.value = item
+  clueSaveError.value = ''
+}
+
+async function saveClueUpdate(value: { status: ClueStatus; processNote?: string }) {
+  if (!selectedClue.value?.name) return
+  clueSaving.value = true
+  clueSaveError.value = ''
+  try {
+    await updateClueStatus(selectedClue.value.name, {
+      ...value,
+      handler: 'admin',
+    })
+    selectedClue.value = null
+    await refreshAll()
+    setMessage('线索处理结果已保存')
+  } catch (error) {
+    clueSaveError.value = error instanceof Error ? error.message : '保存失败，请稍后重试'
+  } finally {
+    clueSaving.value = false
+  }
+}
+
+function requestClueDelete(item: ClueReportVO) {
+  pendingDeleteClue.value = item
+}
+
+async function confirmClueDelete() {
+  const name = pendingDeleteClue.value?.name
+  if (!name) return
+  deletingClue.value = true
+  try {
+    await deleteClue(name)
+    pendingDeleteClue.value = null
+    await refreshAll()
+    setMessage('线索已删除')
+  } finally {
+    deletingClue.value = false
+  }
 }
 
 onMounted(refreshAll)
@@ -177,119 +221,152 @@ onMounted(refreshAll)
   <main class="homeward-admin-shell">
     <div class="homeward-admin-shell-inner">
       <header class="homeward-admin-header">
-        <div>
-          <h1 class="homeward-admin-title">归航寻亲</h1>
-          <p class="homeward-admin-subtitle">寻亲案例、公益展示和访客线索处理</p>
+        <div class="homeward-admin-brand">
+          <span class="homeward-admin-brandmark"><RiHeartPulseLine /></span>
+          <div>
+            <span class="homeward-eyebrow">公益信息管理</span>
+            <h1 class="homeward-admin-title">归航寻亲</h1>
+            <p class="homeward-admin-subtitle">维护寻亲档案，核实每一条可能带人回家的线索</p>
+          </div>
         </div>
-        <VButton type="secondary" @click="refreshAll">刷新</VButton>
+        <div class="homeward-admin-header-actions">
+          <VButton type="secondary" :disabled="loading" @click="refreshAll">
+            <RiRefreshLine :class="{ 'is-spinning': loading }" /> 刷新
+          </VButton>
+          <VButton data-testid="create-case" type="primary" @click="createCase">
+            <RiAddLine /> 新增案例
+          </VButton>
+        </div>
       </header>
 
-      <VTabbar v-model:active-id="activeTab" :items="tabs" id-key="id" label-key="label" />
+      <nav class="homeward-admin-tabs" aria-label="归航寻亲功能">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          :data-testid="`tab-${tab.id}`"
+          type="button"
+          :class="{ 'is-active': activeTab === tab.id }"
+          :aria-current="activeTab === tab.id ? 'page' : undefined"
+          @click="activeTab = tab.id"
+        >
+          <component :is="tab.icon" aria-hidden="true" />
+          <span class="homeward-tab-label">{{ tab.label }}</span>
+          <span v-if="tab.id === 'cases'" class="homeward-tab-count">{{ stats.totalCases }}</span>
+          <span v-if="tab.id === 'clues' && stats.pendingClues" class="homeward-tab-count is-alert">
+            {{ stats.pendingClues }}
+          </span>
+        </button>
+      </nav>
 
-      <p class="homeward-admin-message">{{ message }}</p>
-      <VLoading v-if="loading" />
-
-      <section v-if="activeTab === 'overview'" class="homeward-admin-grid">
-        <article v-for="item in statCards" :key="item.label" class="homeward-admin-stat">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </article>
-      </section>
-
-      <section v-if="activeTab === 'cases'" class="homeward-admin-panel">
-        <div class="homeward-admin-toolbar">
-          <h2>寻亲案例</h2>
-          <input v-model="caseKeyword" placeholder="搜索姓名、地点、标题" @keydown.enter="refreshAll" />
+      <Transition name="homeward-toast">
+        <p v-if="message" class="homeward-admin-message" role="status">{{ message }}</p>
+      </Transition>
+      <div v-if="loadError" class="homeward-error-banner" role="alert">
+        <div>
+          <strong>暂时无法完成操作</strong>
+          <span>{{ loadError }}</span>
         </div>
+        <button type="button" @click="refreshAll">重新加载</button>
+      </div>
+      <div v-if="loading && !cases.length && !clues.length" class="homeward-loading-state">
+        <VLoading />
+        <p>正在同步案例与线索…</p>
+      </div>
 
-        <form class="homeward-admin-form" @submit.prevent="submitCase">
-          <label>姓名<input v-model="caseForm.personName" required /></label>
-          <label>标题<input v-model="caseForm.title" /></label>
-          <label>Slug<input v-model="caseForm.slug" placeholder="留空自动生成" /></label>
-          <label>状态
-            <select v-model="caseForm.status">
-              <option value="DRAFT">草稿</option>
-              <option value="PUBLISHED">已发布</option>
-              <option value="FOUND">已找到</option>
-              <option value="ARCHIVED">已归档</option>
-            </select>
-          </label>
-          <label>优先级<input v-model.number="caseForm.priority" type="number" /></label>
-          <label>失踪日期<input v-model="caseForm.missingDate" /></label>
-          <label>失踪地点<input v-model="caseForm.missingLocation" /></label>
-          <label>封面图<input v-model="caseForm.coverImage" /></label>
-          <label class="is-wide">体貌特征<textarea v-model="caseForm.physicalFeatures" rows="3" /></label>
-          <label class="is-wide">详细描述<textarea v-model="caseForm.description" rows="4" /></label>
-          <label>联系人<input v-model="caseForm.contactName" /></label>
-          <label>联系电话<input v-model="caseForm.contactPhone" /></label>
-          <label>来源名称<input v-model="caseForm.sourceName" /></label>
-          <label>来源链接<input v-model="caseForm.sourceUrl" /></label>
-          <div class="homeward-admin-actions is-wide">
-            <VButton type="primary" @click="submitCase">{{ editingCaseName ? '保存修改' : '新增案例' }}</VButton>
-            <VButton type="secondary" @click="resetCaseForm">重置</VButton>
-          </div>
-        </form>
+      <Transition name="homeward-panel" mode="out-in">
+        <div :key="activeTab" class="homeward-panel-stage">
+          <DashboardOverview
+            v-if="activeTab === 'overview'"
+            :stats="stats"
+            @create="createCase"
+            @navigate="activeTab = $event"
+          />
 
-        <div v-if="cases.length" class="homeward-admin-list">
-          <article v-for="item in cases" :key="item.name" class="homeward-admin-item">
-            <div>
-              <h3>{{ item.title || item.personName }}</h3>
-              <p>{{ item.personName }} · {{ item.missingLocation || '地点待补充' }}</p>
-              <p>{{ item.slug }}</p>
+          <CaseListPanel
+            v-if="activeTab === 'cases'"
+            v-model:keyword="caseKeyword"
+            v-model:status-filter="caseStatusFilter"
+            :cases="cases"
+            :action-name="caseActionName"
+            @search="refreshAll"
+            @create="createCase"
+            @edit="editCase"
+            @action="changeCaseStatus"
+            @delete="requestCaseDelete"
+          />
+
+          <ClueListPanel
+            v-if="activeTab === 'clues'"
+            v-model:keyword="clueKeyword"
+            v-model:status-filter="clueStatusFilter"
+            :clues="clues"
+            @search="refreshAll"
+            @open="openClue"
+            @delete="requestClueDelete"
+          />
+
+          <section
+            v-if="activeTab === 'preview'"
+            class="homeward-content-panel homeward-preview-panel"
+          >
+            <div class="homeward-panel-header">
+              <div>
+                <span class="homeward-eyebrow">访客视角</span>
+                <h2>公益页预览</h2>
+                <p>预览访客在 404 页面进入归航寻亲公益页时看到的内容。</p>
+              </div>
+              <a class="homeward-open-preview" href="/homeward" target="_blank" rel="noopener">
+                打开独立页面 <RiExternalLinkLine />
+              </a>
             </div>
-            <div class="homeward-admin-actions">
-              <VTag>{{ statusLabels[item.status || 'DRAFT'] }}</VTag>
-              <VButton size="sm" @click="editCase(item)">编辑</VButton>
-              <VButton size="sm" type="secondary" @click="changeCaseStatus(item.name, 'publish')">发布</VButton>
-              <VButton size="sm" type="secondary" @click="changeCaseStatus(item.name, 'mark-found')">已找到</VButton>
-              <VButton size="sm" type="danger" @click="removeCase(item.name)">删除</VButton>
+            <div class="homeward-admin-preview">
+              <div class="homeward-preview-browserbar">
+                <span></span><span></span><span></span>
+                <strong>本站 / homeward</strong>
+              </div>
+              <iframe src="/homeward" title="归航寻亲公益页预览"></iframe>
             </div>
-          </article>
+          </section>
         </div>
-        <VEmpty v-else title="暂无寻亲案例" description="新增案例后，404 公益展示才有内容。" />
-      </section>
+      </Transition>
 
-      <section v-if="activeTab === 'clues'" class="homeward-admin-panel">
-        <div class="homeward-admin-toolbar">
-          <h2>线索处理</h2>
-          <input v-model="clueKeyword" placeholder="搜索案例、联系人、线索内容" @keydown.enter="refreshAll" />
-        </div>
-
-        <div v-if="clues.length" class="homeward-admin-list">
-          <article v-for="item in clues" :key="item.name" class="homeward-admin-item">
-            <div>
-              <h3>{{ item.caseTitle }}</h3>
-              <p>{{ item.submitterName || '匿名访客' }} · {{ item.contact }}</p>
-              <p>{{ item.content }}</p>
-              <p>{{ item.location || '未填写位置' }}</p>
-              <textarea
-                v-model="item.processNote"
-                class="homeward-admin-note"
-                rows="3"
-                placeholder="处理备注"
-              />
-            </div>
-            <div class="homeward-admin-actions">
-              <VTag>{{ clueStatusLabels[item.status || 'PENDING'] }}</VTag>
-              <VButton size="sm" type="secondary" @click="changeClueStatus(item, 'CONTACTED')">已联系</VButton>
-              <VButton size="sm" type="secondary" @click="changeClueStatus(item, 'RESOLVED')">已解决</VButton>
-              <VButton size="sm" type="danger" @click="changeClueStatus(item, 'INVALID')">无效</VButton>
-              <VButton size="sm" type="danger" @click="removeClue(item.name)">删除</VButton>
-            </div>
-          </article>
-        </div>
-        <VEmpty v-else title="暂无线索" description="访客提交线索后会出现在这里。" />
-      </section>
-
-      <section v-if="activeTab === 'preview'" class="homeward-admin-panel">
-        <div class="homeward-admin-toolbar">
-          <h2>404 展示预览</h2>
-          <a href="/homeward" target="_blank">打开公益页</a>
-        </div>
-        <div class="homeward-admin-preview">
-          <iframe src="/homeward" title="归航寻亲公益页预览"></iframe>
-        </div>
-      </section>
+      <CaseEditorModal
+        :visible="caseEditorVisible"
+        :case-data="editingCase"
+        :saving="caseSaving"
+        :error="caseSaveError"
+        @close="closeCaseEditor"
+        @save="submitCase"
+      />
+      <ConfirmActionModal
+        v-if="pendingDeleteCase"
+        visible
+        :title="`删除“${pendingDeleteCase.title || pendingDeleteCase.personName || '未命名案例'}”`"
+        description="删除后无法恢复，公益页中的相关展示也会同步移除。"
+        confirm-text="确认删除"
+        :busy="deletingCase"
+        @close="pendingDeleteCase = null"
+        @confirm="confirmCaseDelete"
+      />
+      <ConfirmActionModal
+        v-if="pendingDeleteClue"
+        visible
+        :title="`删除“${pendingDeleteClue.caseTitle || '未关联案例'}”的访客线索`"
+        description="删除后将无法继续追踪这条线索，请确认它确实不需要保留。"
+        confirm-text="确认删除"
+        :busy="deletingClue"
+        @close="pendingDeleteClue = null"
+        @confirm="confirmClueDelete"
+      />
+      <ClueDetailModal
+        v-if="selectedClue"
+        visible
+        :clue="selectedClue"
+        :saving="clueSaving"
+        :error="clueSaveError"
+        @close="selectedClue = null"
+        @save="saveClueUpdate"
+      />
     </div>
   </main>
 </template>
