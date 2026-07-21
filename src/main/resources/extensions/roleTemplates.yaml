@@ -1,0 +1,61 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: rt-console.homeward.muyin.site-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:homeward:console:view"]
+    rbac.authorization.halo.run/display-name: "查看归航寻亲"
+    rbac.authorization.halo.run/module: "归航寻亲"
+rules:
+  - apiGroups: ["console.homeward.muyin.site"]
+    resources: ["cases", "clues", "dashboard"]
+    verbs: ["get", "list"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: rt-console.homeward.muyin.site-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["rt-console.homeward.muyin.site-view"]
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:homeward:console:manage"]
+    rbac.authorization.halo.run/display-name: "管理归航寻亲"
+    rbac.authorization.halo.run/module: "归航寻亲"
+rules:
+  - apiGroups: ["console.homeward.muyin.site"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["homeward.muyin.site"]
+    resources: ["missingpersoncases", "cluereports"]
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: rt-public.homeward.muyin.site-anonymous
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "匿名访问归航寻亲"
+    rbac.authorization.halo.run/module: "归航寻亲"
+rules:
+  - apiGroups: ["public.homeward.muyin.site"]
+    resources: ["widget", "cases", "cases/clues"]
+    verbs: ["get", "list", "create"]
+  - nonResourceURLs:
+      - /apis/public.homeward.muyin.site/v1alpha1/widget
+      - /apis/public.homeward.muyin.site/v1alpha1/cases/*
+    verbs:
+      - get
+  - nonResourceURLs:
+      - /apis/public.homeward.muyin.site/v1alpha1/cases/*/clues
+    verbs:
+      - create

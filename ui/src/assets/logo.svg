@@ -1,0 +1,8 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="归航寻亲">
+  <rect width="128" height="128" rx="28" fill="#2563eb"/>
+  <path d="M64 22c-18.8 0-34 15.2-34 34 0 25.5 34 51 34 51s34-25.5 34-51c0-18.8-15.2-34-34-34z" fill="#fff"/>
+  <circle cx="64" cy="56" r="15" fill="#f59e0b"/>
+  <path d="M50 70l14-12 14 12" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M55 68h18v17H55z" fill="#2563eb"/>
+  <path d="M42 90c10-8 34-8 44 0" fill="none" stroke="#16a34a" stroke-width="7" stroke-linecap="round"/>
+</svg>

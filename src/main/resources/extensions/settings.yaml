@@ -1,0 +1,103 @@
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: plugin-homeward-settings
+spec:
+  forms:
+    - group: general
+      label: 基础设置
+      value:
+        enabled: true
+        publicPageTitle: 归航寻亲
+        publicPageSubtitle: 每一次迷路，都值得被照亮。
+        contactText: 如有线索，请通过表单提交，站长会尽快核验处理。
+      formSchema:
+        - $formkit: switch
+          name: enabled
+          label: 启用归航寻亲
+          value: true
+        - $formkit: text
+          name: publicPageTitle
+          label: 公益页标题
+          value: 归航寻亲
+          validation: required
+        - $formkit: textarea
+          name: publicPageSubtitle
+          label: 公益页副标题
+          value: 每一次迷路，都值得被照亮。
+        - $formkit: textarea
+          name: contactText
+          label: 联系提示
+          value: 如有线索，请通过表单提交，站长会尽快核验处理。
+    - group: display
+      label: 展示设置
+      value:
+        widgetCaseLimit: 4
+        publicPageCaseLimit: 20
+        inject404: true
+      formSchema:
+        - $formkit: number
+          name: widgetCaseLimit
+          label: 404 展示数量
+          value: 4
+          min: 1
+          max: 12
+        - $formkit: number
+          name: publicPageCaseLimit
+          label: 公益页展示数量
+          value: 20
+          min: 1
+          max: 50
+        - $formkit: switch
+          name: inject404
+          label: 在 404 页面展示寻亲模块
+          value: true
+    - group: protection
+      label: 防刷设置
+      value:
+        clueSubmissionEnabled: true
+        maxSubmissionsPerHour: 3
+        minContentLength: 10
+        ipHashSalt: homeward
+      formSchema:
+        - $formkit: switch
+          name: clueSubmissionEnabled
+          label: 允许访客提交线索
+          value: true
+        - $formkit: number
+          name: maxSubmissionsPerHour
+          label: 同 IP 同案例每小时提交上限
+          value: 3
+          min: 0
+          help: 设置为 0 表示不限制，不建议公开站点这么干，容易被刷成菜地。
+        - $formkit: number
+          name: minContentLength
+          label: 线索最少字数
+          value: 10
+          min: 1
+        - $formkit: password
+          name: ipHashSalt
+          label: IP 哈希盐
+          value: homeward
+    - group: notification
+      label: 通知设置
+      value:
+        enabled: true
+        recipients:
+          - admin
+      formSchema:
+        - $formkit: switch
+          name: enabled
+          label: 新线索站内通知
+          value: true
+        - $formkit: list
+          name: recipients
+          label: 通知接收用户
+          value:
+            - admin
+          itemType: string
+          addLabel: 添加用户
+          children:
+            - $formkit: text
+              index: "$index"
+              validation: required

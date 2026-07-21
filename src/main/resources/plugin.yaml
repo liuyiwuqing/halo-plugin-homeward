@@ -1,0 +1,25 @@
+# Refer https://docs.halo.run/developer-guide/plugin/basics/manifest
+
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # The name defines how the plugin is invoked, A unique name
+  name: homeward
+spec:
+  enabled: true
+  requires: ">=2.25.0"
+  version: "1.0.0"
+  author:
+    name: Lywq
+    website: https://blog.muyin.site
+  logo: logo.svg
+  settingName: plugin-homeward-settings
+  configMapName: plugin-homeward-configmap
+  homepage: https://github.com/liuyiwuqing/halo-plugin-homeward#readme
+  repo: https://github.com/liuyiwuqing/halo-plugin-homeward
+  issues: https://github.com/liuyiwuqing/halo-plugin-homeward/issues
+  displayName: "归航寻亲"
+  description: "用于寻亲公益宣传、404 公益展示和访客线索收集的 Halo 插件。"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/liuyiwuqing/halo-plugin-homeward/blob/main/LICENSE"

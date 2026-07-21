@@ -1,0 +1,180 @@
+.homeward-admin-shell {
+  min-height: 100%;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.homeward-admin-shell-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.homeward-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.homeward-admin-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.homeward-admin-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.homeward-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.homeward-admin-stat {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.homeward-admin-stat span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.homeward-admin-stat strong {
+  display: block;
+  margin-top: 8px;
+  color: #1d4ed8;
+  font-size: 28px;
+}
+
+.homeward-admin-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.homeward-admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.homeward-admin-toolbar input,
+.homeward-admin-form input,
+.homeward-admin-form textarea,
+.homeward-admin-form select {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 9px 10px;
+}
+
+.homeward-admin-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.homeward-admin-form label {
+  display: grid;
+  gap: 6px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.homeward-admin-form .is-wide {
+  grid-column: 1 / -1;
+}
+
+.homeward-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.homeward-admin-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.homeward-admin-item h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.homeward-admin-item p {
+  margin: 4px 0;
+  color: #64748b;
+}
+
+.homeward-admin-note {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.homeward-admin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.homeward-admin-preview {
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.homeward-admin-preview iframe {
+  display: block;
+  width: 100%;
+  min-height: 520px;
+  border: 0;
+}
+
+.homeward-admin-message {
+  min-height: 20px;
+  color: #16a34a;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .homeward-admin-shell-inner {
+    padding: 16px;
+  }
+
+  .homeward-admin-header,
+  .homeward-admin-toolbar,
+  .homeward-admin-item {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,60 @@
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: homeward-clue-submitted-notification
+  annotations:
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:homeward:console:manage"]
+spec:
+  displayName: "【归航寻亲】-新线索通知"
+  description: "当访客提交寻亲线索时，将会通知配置的管理员。"
+  properties:
+    - name: title
+      type: string
+      description: "标题"
+    - name: body
+      type: string
+      description: "正文"
+    - name: caseTitle
+      type: string
+      description: "案例标题"
+    - name: submitterName
+      type: string
+      description: "提交人"
+    - name: contact
+      type: string
+      description: "联系方式"
+    - name: content
+      type: string
+      description: "线索内容"
+    - name: jumpUrl
+      type: string
+      description: "跳转地址"
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-homeward-clue-submitted-notification
+spec:
+  reasonSelector:
+    reasonType: homeward-clue-submitted-notification
+    language: default
+  template:
+    title: "[(${title})]"
+    rawBody: |
+      [(${subscriber.displayName})] 你好：
+
+      案例：[(${caseTitle})]
+      提交人：[(${submitterName})]
+      联系方式：[(${contact})]
+
+      [(${content})]
+    htmlBody: |
+      <div style="font-family: Arial, sans-serif; line-height: 1.7; background:#f8fafc; padding:20px; border-radius:8px;">
+        <h2 style="margin:0 0 12px; color:#1f2937;" th:text="${title}"></h2>
+        <p>案例：<strong th:text="${caseTitle}"></strong></p>
+        <p>提交人：<span th:text="${submitterName}"></span></p>
+        <p>联系方式：<span th:text="${contact}"></span></p>
+        <p style="white-space:pre-wrap;" th:text="${content}"></p>
+        <a th:href="${jumpUrl}" style="display:inline-block; margin-top:12px; padding:8px 14px; background:#2563eb; color:#fff; border-radius:6px; text-decoration:none;">查看线索</a>
+      </div>
