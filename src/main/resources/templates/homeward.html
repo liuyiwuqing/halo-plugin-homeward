@@ -11,6 +11,11 @@
     <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-public.css" />
   </head>
   <body class="homeward-public-body">
+    <aside class="homeward-not-found-notice" th:if="${homeward404}" aria-label="页面未找到提示">
+      <strong>404 · 页面未找到</strong>
+      <span>原来的页面不在这里了，但这些等待回家的人仍值得被看见。</span>
+      <a href="/">返回博客首页</a>
+    </aside>
     <a class="homeward-skip-link" href="#homeward-page-content">跳到寻人档案</a>
     <main id="homeward-page" class="homeward-page">
       <section class="homeward-hero">

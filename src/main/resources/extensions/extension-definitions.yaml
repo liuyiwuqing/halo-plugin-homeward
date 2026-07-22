@@ -1,0 +1,9 @@
+apiVersion: plugin.halo.run/v1alpha1
+kind: ExtensionDefinition
+metadata:
+  name: homeward-not-found-additional-webfilter
+spec:
+  extensionPointName: additional-webfilter
+  className: site.muyin.homeward.filter.HomewardNotFoundWebFilter
+  displayName: "归航寻亲 404 响应增强"
+  description: "在博客的 HTML 404 响应中注入归航寻亲公益内容。"

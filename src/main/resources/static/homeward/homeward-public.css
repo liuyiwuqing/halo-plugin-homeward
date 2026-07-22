@@ -19,6 +19,32 @@
   background: var(--homeward-paper);
 }
 
+.homeward-not-found-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid rgb(255 255 255 / 18%);
+  background: var(--homeward-ink);
+  color: #fff;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.homeward-not-found-notice strong {
+  color: #f0b5a9;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.homeward-not-found-notice a {
+  color: #fff;
+  font-weight: 600;
+  text-underline-offset: 0.25em;
+  white-space: nowrap;
+}
+
 .homeward-public-body.homeward-dialog-active,
 .homeward-dialog-active body {
   overflow: hidden;
@@ -842,6 +868,13 @@
 }
 
 @media (max-width: 640px) {
+  .homeward-not-found-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.85rem 1rem;
+  }
+
   .homeward-hero__inner,
   .homeward-section,
   .homeward-404 {

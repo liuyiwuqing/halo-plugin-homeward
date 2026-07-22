@@ -17,7 +17,9 @@ class HomewardPublicAssetsTest {
                 .contains("href=\"#homeward-page-content\"")
                 .contains("<h1")
                 .contains("role=\"status\"")
-                .contains("aria-live=\"polite\"");
+                .contains("aria-live=\"polite\"")
+                .contains("th:if=\"${homeward404}\"")
+                .contains("404 · 页面未找到");
         }
     }
 
