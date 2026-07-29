@@ -61,3 +61,14 @@ export interface MissingPersonCasePayload {
   }
   spec: Partial<MissingPersonCaseVO>
 }
+
+export interface CaseImportRequest {
+  sourceUrl?: string
+  pageContent?: string
+}
+
+export interface CaseImportPreview {
+  caseData: MissingPersonCaseVO
+  extractedFieldCount: number
+  warnings: string[]
+}

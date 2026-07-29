@@ -1,5 +1,7 @@
 import { axiosInstance } from '@halo-dev/api-client'
 import type {
+  CaseImportPreview,
+  CaseImportRequest,
   ClueReportVO,
   ClueStatus,
   DashboardStats,
@@ -24,6 +26,14 @@ export async function saveCase(payload: MissingPersonCasePayload) {
   return data
 }
 
+export async function previewCaseImport(payload: CaseImportRequest) {
+  const { data } = await axiosInstance.post<CaseImportPreview>(
+    `${CONSOLE_BASE}/cases/import/preview`,
+    payload,
+  )
+  return data
+}
+
 export async function updateCaseStatus(name: string, action: 'publish' | 'archive' | 'mark-found') {
   const { data } = await axiosInstance.post<MissingPersonCaseVO>(
     `${CONSOLE_BASE}/cases/${name}/${action}`,
@@ -39,10 +49,9 @@ export async function deleteCase(name: string) {
 }
 
 export async function listClues(params: Record<string, unknown>) {
-  const { data } = await axiosInstance.get<ListResult<ClueReportVO>>(
-    `${CONSOLE_BASE}/clues/list`,
-    { params },
-  )
+  const { data } = await axiosInstance.get<ListResult<ClueReportVO>>(`${CONSOLE_BASE}/clues/list`, {
+    params,
+  })
   return data
 }
 
@@ -58,9 +67,7 @@ export async function updateClueStatus(
 }
 
 export async function deleteClue(name: string) {
-  const { data } = await axiosInstance.delete<ClueReportVO>(
-    `${CONSOLE_BASE}/clues/${name}/delete`,
-  )
+  const { data } = await axiosInstance.delete<ClueReportVO>(`${CONSOLE_BASE}/clues/${name}/delete`)
   return data
 }
 

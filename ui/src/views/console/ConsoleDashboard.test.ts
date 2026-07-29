@@ -81,6 +81,7 @@ const api = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
   listCases: vi.fn(),
   listClues: vi.fn(),
+  previewCaseImport: vi.fn(),
   saveCase: vi.fn(),
   updateCaseStatus: vi.fn(),
   updateClueStatus: vi.fn(),
@@ -110,6 +111,39 @@ describe('ConsoleDashboard', () => {
     await wrapper.get('[data-testid="create-case"]').trigger('click')
 
     expect(wrapper.get('[role="dialog"]').text()).toContain('新增寻亲案例')
+  })
+
+  it('用户解析网页后在案例编辑器中核对导入草稿', async () => {
+    api.previewCaseImport.mockResolvedValue({
+      caseData: {
+        personName: '陈安',
+        title: '寻找陈安',
+        missingLocation: '沈阳市和平区',
+        sourceUrl: 'https://example.org/missing/chen-an',
+        status: 'DRAFT',
+      },
+      extractedFieldCount: 4,
+      warnings: ['请核对日期与联系方式'],
+    })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="import-case"]').trigger('click')
+    await wrapper.get('[name="sourceUrl"]').setValue('https://example.org/missing/chen-an')
+    await wrapper.get('[data-testid="preview-case-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImport).toHaveBeenCalledWith({
+      sourceUrl: 'https://example.org/missing/chen-an',
+      pageContent: undefined,
+    })
+    expect(wrapper.get('[name="personName"]').element).toHaveProperty('value', '陈安')
+    expect(wrapper.get('[name="missingLocation"]').element).toHaveProperty('value', '沈阳市和平区')
+    expect(wrapper.get('[data-testid="import-review-notice"]').text()).toContain(
+      '请核对日期与联系方式',
+    )
   })
 
   it('用户点击概览指标后进入对应工作区', async () => {

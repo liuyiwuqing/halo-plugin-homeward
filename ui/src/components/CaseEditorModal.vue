@@ -8,6 +8,7 @@ const props = defineProps<{
   caseData?: MissingPersonCaseVO | null
   saving?: boolean
   error?: string
+  reviewWarnings?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -120,6 +121,17 @@ function submit() {
     >
       <h2 id="homeward-case-editor-title" class="homeward-visually-hidden">{{ title }}</h2>
       <p class="homeward-case-editor-intro">完善基本信息后保存，稍后仍可继续补充资料。</p>
+      <div
+        v-if="reviewWarnings?.length"
+        class="homeward-import-review-notice"
+        data-testid="import-review-notice"
+        role="status"
+      >
+        <strong>网页资料已回填，请先核对再保存</strong>
+        <ul>
+          <li v-for="warning in reviewWarnings" :key="warning">{{ warning }}</li>
+        </ul>
+      </div>
       <form class="homeward-case-editor-form" @submit.prevent="submit">
         <fieldset class="homeward-form-section">
           <legend>基本信息</legend>

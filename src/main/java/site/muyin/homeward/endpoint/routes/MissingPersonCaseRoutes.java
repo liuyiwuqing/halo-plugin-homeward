@@ -12,6 +12,9 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ListResult;
 import site.muyin.homeward.enums.CaseStatus;
+import site.muyin.homeward.importer.CaseImportService;
+import site.muyin.homeward.model.CaseImportPreview;
+import site.muyin.homeward.model.CaseImportRequest;
 import site.muyin.homeward.model.MissingPersonCasePublicVO;
 import site.muyin.homeward.model.MissingPersonCaseVO;
 import site.muyin.homeward.model.WidgetResponse;
@@ -30,6 +33,8 @@ import static site.muyin.homeward.endpoint.HomewardConsoleEndpoint.CONSOLE_TAG;
 public class MissingPersonCaseRoutes {
 
     private final MissingPersonCaseService service;
+
+    private final CaseImportService caseImportService;
 
     public RouterFunction<ServerResponse> consoleRoutes() {
         return SpringdocRouteBuilder.route()
@@ -64,6 +69,14 @@ public class MissingPersonCaseRoutes {
                     .content(contentBuilder().mediaType(MediaType.APPLICATION_JSON_VALUE)
                         .schema(Builder.schemaBuilder().implementation(MissingPersonCase.class))))
                 .response(responseBuilder().implementation(MissingPersonCaseVO.class)))
+            .POST("/import/preview", this::previewImportForConsole, builder -> builder
+                .operationId("homeward-case-import-preview-for-console")
+                .description("从公网网页或粘贴正文解析寻亲案例草稿，不直接保存")
+                .tag(CONSOLE_TAG)
+                .requestBody(requestBodyBuilder().required(true)
+                    .content(contentBuilder().mediaType(MediaType.APPLICATION_JSON_VALUE)
+                        .schema(Builder.schemaBuilder().implementation(CaseImportRequest.class))))
+                .response(responseBuilder().implementation(CaseImportPreview.class)))
             .POST("/{name}/publish", request -> status(request, CaseStatus.PUBLISHED), builder -> builder
                 .operationId("homeward-case-publish-for-console")
                 .description("发布寻亲案例")
@@ -115,6 +128,12 @@ public class MissingPersonCaseRoutes {
     private Mono<ServerResponse> updateForConsole(ServerRequest request) {
         return request.bodyToMono(MissingPersonCase.class)
             .flatMap(service::update)
+            .flatMap(response -> ServerResponse.ok().bodyValue(response));
+    }
+
+    private Mono<ServerResponse> previewImportForConsole(ServerRequest request) {
+        return request.bodyToMono(CaseImportRequest.class)
+            .flatMap(caseImportService::preview)
             .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 

@@ -4,6 +4,7 @@ import { VButton, VLoading } from '@halo-dev/components'
 import RiAddLine from '~icons/ri/add-line'
 import RiChatCheckLine from '~icons/ri/chat-check-line'
 import RiDashboard3Line from '~icons/ri/dashboard-3-line'
+import RiDownloadCloudLine from '~icons/ri/download-cloud-line'
 import RiExternalLinkLine from '~icons/ri/external-link-line'
 import RiFileUserLine from '~icons/ri/file-user-line'
 import RiHeartPulseLine from '~icons/ri/heart-pulse-line'
@@ -15,11 +16,13 @@ import {
   getDashboardStats,
   listCases,
   listClues,
+  previewCaseImport,
   saveCase,
   updateCaseStatus,
   updateClueStatus,
 } from '@/api'
 import type {
+  CaseImportRequest,
   CaseStatus,
   ClueReportVO,
   ClueStatus,
@@ -28,6 +31,7 @@ import type {
   MissingPersonCaseVO,
 } from '@/type'
 import CaseEditorModal from '@/components/CaseEditorModal.vue'
+import CaseImportModal from '@/components/CaseImportModal.vue'
 import ConfirmActionModal from '@/components/ConfirmActionModal.vue'
 import ClueDetailModal from '@/components/ClueDetailModal.vue'
 import DashboardOverview from '@/components/DashboardOverview.vue'
@@ -57,6 +61,10 @@ const caseEditorVisible = ref(false)
 const editingCase = ref<MissingPersonCaseVO | null>(null)
 const caseSaving = ref(false)
 const caseSaveError = ref('')
+const caseImportVisible = ref(false)
+const caseImporting = ref(false)
+const caseImportError = ref('')
+const caseImportWarnings = ref<string[]>([])
 const pendingDeleteCase = ref<MissingPersonCaseVO | null>(null)
 const deletingCase = ref(false)
 const caseActionName = ref('')
@@ -103,14 +111,49 @@ async function refreshAll() {
 
 function editCase(item: MissingPersonCaseVO) {
   editingCase.value = item
+  caseImportWarnings.value = []
   caseSaveError.value = ''
   caseEditorVisible.value = true
 }
 
 function createCase() {
   editingCase.value = null
+  caseImportWarnings.value = []
   caseSaveError.value = ''
   caseEditorVisible.value = true
+}
+
+function openCaseImport() {
+  caseImportError.value = ''
+  caseImportVisible.value = true
+}
+
+function closeCaseImport() {
+  if (caseImporting.value) return
+  caseImportVisible.value = false
+}
+
+async function previewImport(request: CaseImportRequest) {
+  caseImporting.value = true
+  caseImportError.value = ''
+  try {
+    const preview = await previewCaseImport(request)
+    editingCase.value = {
+      ...preview.caseData,
+      status: 'DRAFT',
+      priority: preview.caseData.priority ?? 0,
+    }
+    caseImportWarnings.value = preview.warnings?.length
+      ? preview.warnings
+      : ['自动识别结果可能存在遗漏，请逐项核对后再保存。']
+    caseImportVisible.value = false
+    caseEditorVisible.value = true
+  } catch (error) {
+    caseImportError.value =
+      error instanceof Error ? error.message : '网页解析失败，请粘贴正文后重试'
+  } finally {
+    caseImporting.value = false
+  }
 }
 
 function closeCaseEditor() {
@@ -233,6 +276,9 @@ onMounted(refreshAll)
           <VButton type="secondary" :disabled="loading" @click="refreshAll">
             <RiRefreshLine :class="{ 'is-spinning': loading }" /> 刷新
           </VButton>
+          <VButton data-testid="import-case" type="secondary" @click="openCaseImport">
+            <RiDownloadCloudLine /> 从网页导入
+          </VButton>
           <VButton data-testid="create-case" type="primary" @click="createCase">
             <RiAddLine /> 新增案例
           </VButton>
@@ -335,8 +381,16 @@ onMounted(refreshAll)
         :case-data="editingCase"
         :saving="caseSaving"
         :error="caseSaveError"
+        :review-warnings="caseImportWarnings"
         @close="closeCaseEditor"
         @save="submitCase"
+      />
+      <CaseImportModal
+        :visible="caseImportVisible"
+        :loading="caseImporting"
+        :error="caseImportError"
+        @close="closeCaseImport"
+        @preview="previewImport"
       />
       <ConfirmActionModal
         v-if="pendingDeleteCase"

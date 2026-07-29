@@ -90,14 +90,13 @@ spec:
           name: enabled
           label: 新线索站内通知
           value: true
-        - $formkit: list
+        - $formkit: userSelect
           name: recipients
           label: 通知接收用户
           value:
             - admin
-          itemType: string
-          addLabel: 添加用户
-          children:
-            - $formkit: text
-              index: "$index"
-              validation: required
+          multiple: true
+          searchable: true
+          clearable: true
+          validation: required
+          help: 可搜索并选择一个或多个 Halo 用户。
