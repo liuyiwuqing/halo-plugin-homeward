@@ -9,6 +9,8 @@ spec:
   enabled: true
   requires: ">=2.25.0"
   version: "1.0.0"
+  pluginDependencies:
+    ai-foundation: "*"
   author:
     name: Lywq
     website: https://blog.muyin.site

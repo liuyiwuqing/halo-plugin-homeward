@@ -1,14 +1,25 @@
 package site.muyin.homeward.importer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import site.muyin.homeward.enums.CaseStatus;
+import site.muyin.homeward.model.CaseImportBatchRequest;
 import site.muyin.homeward.model.CaseImportRequest;
+import site.muyin.homeward.model.CaseImportPreview;
+import site.muyin.homeward.model.MissingPersonCaseVO;
 
 class CaseImportServiceTest {
 
@@ -140,5 +151,103 @@ class CaseImportServiceTest {
         assertThat(preview).isNotNull();
         assertThat(preview.getCaseData().getPersonName()).isEqualTo("赵远");
         assertThat(preview.getCaseData().getMissingLocation()).isEqualTo("黑龙江省哈尔滨市");
+    }
+
+    @Test
+    void aiRequestIsDelegatedAfterRulePreviewAndKeepsReviewBoundary() {
+        var aiService = mock(CaseImportAiService.class);
+        when(aiService.preview(any(), any(), any(), any())).thenAnswer(invocation -> {
+            CaseImportPreview preview = invocation.getArgument(3);
+            preview.setAiGenerated(true);
+            preview.getWarnings().add("AI 自动提取结果仅供参考");
+            return Mono.just(preview);
+        });
+        var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
+            sourceUrl -> Mono.error(new AssertionError("粘贴正文时不应请求网络")),
+            Optional.of(aiService));
+        var request = new CaseImportRequest();
+        request.setAi(true);
+        request.setPageContent("姓名：林小满\n失踪地点：沈阳市和平区");
+
+        var preview = service.preview(request).block();
+
+        assertThat(preview).isNotNull();
+        assertThat(preview.isAiGenerated()).isTrue();
+        assertThat(preview.getCaseData().getPersonName()).isEqualTo("林小满");
+        assertThat(preview.getWarnings()).contains("AI 自动提取结果仅供参考");
+    }
+
+    @Test
+    void incompleteRulePreviewReportsConfiguredAiFallback() {
+        var aiService = mock(CaseImportAiService.class);
+        when(aiService.isAvailable()).thenReturn(Mono.just(true));
+        var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
+            sourceUrl -> Mono.error(new AssertionError("粘贴正文时不应请求网络")),
+            Optional.of(aiService));
+        var request = new CaseImportRequest();
+        request.setPageContent("<html><head><title>寻亲资料</title></head><body>页面内容</body></html>");
+
+        var preview = service.preview(request).block();
+
+        assertThat(preview).isNotNull();
+        assertThat(preview.isAiRecommended()).isTrue();
+        assertThat(preview.isAiAvailable()).isTrue();
+        assertThat(preview.isAiGenerated()).isFalse();
+    }
+
+    @Test
+    void batchPreviewReturnsIndependentSuccessAndFailureItems() {
+        var aiService = new CaseImportAiService() {
+            @Override
+            public Mono<CaseImportPreview> preview(CaseImportRequest request, String content,
+                                                    String sourceUrl, CaseImportPreview rulePreview) {
+                if (content.contains("失败")) {
+                    return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "模型调用失败"));
+                }
+                return Mono.just(rulePreview);
+            }
+
+            @Override
+            public Mono<Boolean> isAvailable() {
+                return Mono.just(true);
+            }
+
+            @Override
+            public Mono<CaseImportPreview> previewDocument(CaseImportRequest request,
+                                                            byte[] content, String mediaType,
+                                                            String filename) {
+                return Mono.error(new UnsupportedOperationException());
+            }
+        };
+        var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
+            sourceUrl -> Mono.error(new AssertionError("批量粘贴正文时不应请求网络")),
+            Optional.of(aiService));
+        var first = new CaseImportRequest();
+        first.setPageContent("姓名：林小满");
+        var second = new CaseImportRequest();
+        second.setPageContent("失败");
+        var batch = new CaseImportBatchRequest();
+        batch.setItems(List.of(first, second));
+
+        var result = service.previewBatch(batch).block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.getSucceeded()).isEqualTo(1);
+        assertThat(result.getFailed()).isEqualTo(1);
+        assertThat(result.getItems().get(0).getPreview()).isNotNull();
+        assertThat(result.getItems().get(1).getError()).isEqualTo("模型调用失败");
+    }
+
+    @Test
+    void aiRequestExplainsMissingAiFoundationInsteadOfFallingBackSilently() {
+        var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
+            sourceUrl -> Mono.error(new AssertionError("不应请求网络")));
+        var request = new CaseImportRequest();
+        request.setAi(true);
+        request.setPageContent("姓名：林小满");
+
+        assertThatThrownBy(() -> service.preview(request).block())
+            .isInstanceOfSatisfying(ResponseStatusException.class, error ->
+                assertThat(error.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
     }
 }

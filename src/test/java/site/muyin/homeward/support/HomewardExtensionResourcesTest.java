@@ -43,4 +43,19 @@ class HomewardExtensionResourcesTest {
                 .doesNotContain("addLabel: 添加用户");
         }
     }
+
+    @Test
+    void aiSettingsUseThePublicFoundationModelSelector() throws Exception {
+        try (var input = getClass().getResourceAsStream("/extensions/settings.yaml")) {
+            assertThat(input).isNotNull();
+            String yaml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(yaml)
+                .contains("group: ai")
+                .contains("$formkit: aiModelSelector")
+                .contains("name: documentModelName")
+                .contains("fileInput: true")
+                .contains("- data");
+        }
+    }
 }

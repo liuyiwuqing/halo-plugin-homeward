@@ -18,12 +18,16 @@ vi.mock('@halo-dev/components', () => {
     VEmpty: passthrough('div'),
     VLoading: passthrough('div'),
     VModal: defineComponent({
+      inheritAttrs: false,
       props: ['title', 'visible'],
-      setup(props, { slots }) {
+      setup(props, { attrs, slots }) {
         return () =>
           props.visible === false
             ? null
-            : h('div', { 'data-modal-title': props.title }, [slots.default?.(), slots.footer?.()])
+            : h('div', { ...attrs, 'data-modal-title': props.title }, [
+                slots.default?.(),
+                slots.footer?.(),
+              ])
       },
     }),
     VTabbar: passthrough('div'),
@@ -81,7 +85,10 @@ const api = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
   listCases: vi.fn(),
   listClues: vi.fn(),
+  previewCaseImportBatch: vi.fn(),
   previewCaseImport: vi.fn(),
+  previewCaseImportDocument: vi.fn(),
+  previewCaseImportDocuments: vi.fn(),
   saveCase: vi.fn(),
   updateCaseStatus: vi.fn(),
   updateClueStatus: vi.fn(),
@@ -144,6 +151,163 @@ describe('ConsoleDashboard', () => {
     expect(wrapper.get('[data-testid="import-review-notice"]').text()).toContain(
       '请核对日期与联系方式',
     )
+  })
+
+  it('网页字段不足且 AI 可用时提示重新使用 AI 解析', async () => {
+    api.previewCaseImport
+      .mockResolvedValueOnce({
+        caseData: {
+          sourceUrl: 'https://example.org/missing/empty',
+          status: 'DRAFT',
+        },
+        extractedFieldCount: 0,
+        warnings: ['未识别到姓名'],
+        aiAvailable: true,
+        aiRecommended: true,
+      })
+      .mockResolvedValueOnce({
+        caseData: {
+          personName: '陈安',
+          missingLocation: '沈阳市和平区',
+          status: 'DRAFT',
+        },
+        extractedFieldCount: 2,
+        warnings: ['AI 自动提取结果仅供参考'],
+        aiAvailable: true,
+        aiGenerated: true,
+      })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="import-case"]').trigger('click')
+    await wrapper.get('[name="sourceUrl"]').setValue('https://example.org/missing/empty')
+    await wrapper.get('[data-testid="preview-case-import"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="case-import-ai-suggestion"]').text()).toContain(
+      '规则解析未识别到有效寻亲字段',
+    )
+    expect(wrapper.find('[name="personName"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="use-ai-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImport).toHaveBeenNthCalledWith(2, {
+      sourceUrl: 'https://example.org/missing/empty',
+      pageContent: undefined,
+      ai: true,
+    })
+    expect(wrapper.get('[name="personName"]').element).toHaveProperty('value', '陈安')
+  })
+
+  it('用户开启 AI 后解析自然语言资料', async () => {
+    api.previewCaseImport.mockResolvedValue({
+      caseData: { personName: '王小北', status: 'DRAFT' },
+      extractedFieldCount: 2,
+      warnings: ['AI 自动提取结果仅供参考'],
+      aiGenerated: true,
+    })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="import-case"]').trigger('click')
+    await wrapper.get('[data-testid="case-import-ai"]').setValue(true)
+    await wrapper.get('[name="pageContent"]').setValue('王小北在长春火车站附近走失')
+    await wrapper.get('[data-testid="preview-case-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImport).toHaveBeenCalledWith({
+      sourceUrl: undefined,
+      pageContent: '王小北在长春火车站附近走失',
+      ai: true,
+    })
+    expect(wrapper.get('[name="personName"]').element).toHaveProperty('value', '王小北')
+  })
+
+  it('用户上传文档后走 AI 文档解析接口', async () => {
+    api.previewCaseImportDocument.mockResolvedValue({
+      caseData: { personName: '赵远', sourceName: 'case.pdf', status: 'DRAFT' },
+      extractedFieldCount: 2,
+      warnings: [],
+      aiGenerated: true,
+    })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="import-case"]').trigger('click')
+    const file = new File(['寻亲资料'], 'case.pdf', { type: 'application/pdf' })
+    const fileInput = wrapper.get('[data-testid="case-import-file"]')
+    Object.defineProperty(fileInput.element, 'files', { value: [file] })
+    await fileInput.trigger('change')
+    await wrapper.get('[data-testid="preview-case-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImportDocument).toHaveBeenCalledWith(file)
+    expect(wrapper.get('[name="personName"]').element).toHaveProperty('value', '赵远')
+  })
+
+  it('批量 AI 解析后逐条进入案例核对', async () => {
+    api.previewCaseImportBatch.mockResolvedValue({
+      items: [
+        {
+          index: 0,
+          preview: {
+            caseData: { personName: '林小满', status: 'DRAFT' },
+            extractedFieldCount: 1,
+            warnings: ['请核对'],
+            aiGenerated: true,
+          },
+        },
+      ],
+      succeeded: 1,
+      failed: 0,
+    })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="batch-import-case"]').trigger('click')
+    await wrapper
+      .get('[data-testid="batch-import-source-text"]')
+      .setValue('姓名：林小满\n失踪地点：沈阳市和平区')
+    await wrapper.get('[data-testid="preview-batch-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImportBatch).toHaveBeenCalledWith({
+      items: [{ pageContent: '姓名：林小满\n失踪地点：沈阳市和平区', ai: true }],
+    })
+    await wrapper.get('[data-testid="review-batch-import-0"]').trigger('click')
+    expect(wrapper.get('[name="personName"]').element).toHaveProperty('value', '林小满')
+  })
+
+  it('用户可通过回车逐行输入多个网页地址', async () => {
+    api.previewCaseImportBatch.mockResolvedValue({ items: [], succeeded: 0, failed: 0 })
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="batch-import-case"]').trigger('click')
+    const sourceText = wrapper.get('[data-testid="batch-import-source-text"]')
+    expect((sourceText.element as HTMLTextAreaElement).placeholder).toContain('\n---\n')
+
+    await sourceText.setValue('https://example.org/missing/001\nhttps://example.org/missing/002')
+    await wrapper.get('[data-testid="preview-batch-import"]').trigger('click')
+    await flushPromises()
+
+    expect(api.previewCaseImportBatch).toHaveBeenCalledWith({
+      items: [
+        { sourceUrl: 'https://example.org/missing/001', ai: true },
+        { sourceUrl: 'https://example.org/missing/002', ai: true },
+      ],
+    })
   })
 
   it('用户点击概览指标后进入对应工作区', async () => {
@@ -247,11 +411,116 @@ describe('ConsoleDashboard', () => {
 
     expect(api.deleteCase).not.toHaveBeenCalled()
     expect(wrapper.get('[role="alertdialog"]').text()).toContain('删除“寻找林小满”')
+    expect(
+      wrapper.get('.homeward-confirm-modal').find('[data-testid="confirm-action"]').exists(),
+    ).toBe(true)
 
     await wrapper.get('[data-testid="confirm-action"]').trigger('click')
     await flushPromises()
 
     expect(api.deleteCase).toHaveBeenCalledWith('case-lin-xiaoman')
+  })
+
+  it('删除案例后不展示仍出现在过期列表响应中的案例', async () => {
+    const caseItem = {
+      name: 'case-lin-xiaoman',
+      personName: '林小满',
+      title: '寻找林小满',
+      status: 'DRAFT',
+    }
+    api.listCases.mockResolvedValue({ page: 1, size: 30, total: 1, items: [caseItem] })
+    api.deleteCase.mockResolvedValue({})
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-cases"]').trigger('click')
+    await wrapper.get('[data-testid="delete-case-case-lin-xiaoman"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="delete-case-case-lin-xiaoman"]').exists()).toBe(false)
+  })
+
+  it('删除案例后仍提交已返回的新列表，即使统计刷新失败', async () => {
+    const caseItem = {
+      name: 'case-lin-xiaoman',
+      personName: '林小满',
+      title: '寻找林小满',
+      status: 'DRAFT',
+    }
+    api.getDashboardStats
+      .mockResolvedValueOnce({ totalCases: 1, publishedCases: 0, foundCases: 0, pendingClues: 0 })
+      .mockRejectedValueOnce(new Error('统计暂不可用'))
+    api.listCases
+      .mockResolvedValueOnce({ page: 1, size: 30, total: 1, items: [caseItem] })
+      .mockResolvedValueOnce({ page: 1, size: 30, total: 0, items: [] })
+    api.deleteCase.mockResolvedValue({})
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-cases"]').trigger('click')
+    await wrapper.get('[data-testid="delete-case-case-lin-xiaoman"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="delete-case-case-lin-xiaoman"]').exists()).toBe(false)
+  })
+
+  it('删除线索后仍提交已返回的新列表，即使统计刷新失败', async () => {
+    const clueItem = {
+      name: 'clue-001',
+      caseTitle: '寻找林小满',
+      submitterName: '周女士',
+      contact: '13900139000',
+      content: '曾在车站附近见到相似人员',
+      status: 'PENDING',
+    }
+    api.getDashboardStats
+      .mockResolvedValueOnce({ totalCases: 0, publishedCases: 0, foundCases: 0, pendingClues: 1 })
+      .mockRejectedValueOnce(new Error('统计暂不可用'))
+    api.listClues
+      .mockResolvedValueOnce({ page: 1, size: 30, total: 1, items: [clueItem] })
+      .mockResolvedValueOnce({ page: 1, size: 30, total: 0, items: [] })
+    api.deleteClue.mockResolvedValue({})
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-clues"]').trigger('click')
+    await wrapper.get('[data-testid="delete-clue-clue-001"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="delete-clue-clue-001"]').exists()).toBe(false)
+  })
+
+  it('删除线索后不展示仍出现在过期列表响应中的线索', async () => {
+    const clueItem = {
+      name: 'clue-001',
+      caseTitle: '寻找林小满',
+      submitterName: '周女士',
+      contact: '13900139000',
+      content: '曾在车站附近见到相似人员',
+      status: 'PENDING',
+    }
+    api.listClues.mockResolvedValue({ page: 1, size: 30, total: 1, items: [clueItem] })
+    api.deleteClue.mockResolvedValue({})
+    const wrapper = mount(ConsoleDashboard, {
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-clues"]').trigger('click')
+    await wrapper.get('[data-testid="delete-clue-clue-001"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="delete-clue-clue-001"]').exists()).toBe(false)
   })
 
   it('在线索详情弹窗中记录备注并更新处理状态', async () => {

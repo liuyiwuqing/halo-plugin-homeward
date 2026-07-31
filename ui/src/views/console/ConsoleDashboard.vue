@@ -17,12 +17,18 @@ import {
   listCases,
   listClues,
   previewCaseImport,
+  previewCaseImportDocument,
+  previewCaseImportBatch,
+  previewCaseImportDocuments,
   saveCase,
   updateCaseStatus,
   updateClueStatus,
 } from '@/api'
 import type {
   CaseImportRequest,
+  CaseImportBatchItem,
+  CaseImportBatchPreview,
+  CaseImportBatchRequest,
   CaseStatus,
   ClueReportVO,
   ClueStatus,
@@ -31,6 +37,7 @@ import type {
   MissingPersonCaseVO,
 } from '@/type'
 import CaseEditorModal from '@/components/CaseEditorModal.vue'
+import CaseBatchImportModal from '@/components/CaseBatchImportModal.vue'
 import CaseImportModal from '@/components/CaseImportModal.vue'
 import ConfirmActionModal from '@/components/ConfirmActionModal.vue'
 import ClueDetailModal from '@/components/ClueDetailModal.vue'
@@ -64,7 +71,14 @@ const caseSaveError = ref('')
 const caseImportVisible = ref(false)
 const caseImporting = ref(false)
 const caseImportError = ref('')
+const caseImportAiSuggestion = ref('')
 const caseImportWarnings = ref<string[]>([])
+const caseBatchImportVisible = ref(false)
+const caseBatchImporting = ref(false)
+const caseBatchImportError = ref('')
+const caseBatchImportResult = ref<CaseImportBatchPreview | null>(null)
+const caseBatchReviewed = ref<number[]>([])
+const batchReviewingIndex = ref<number | null>(null)
 const pendingDeleteCase = ref<MissingPersonCaseVO | null>(null)
 const deletingCase = ref(false)
 const caseActionName = ref('')
@@ -94,22 +108,37 @@ async function refreshAll() {
   loading.value = true
   loadError.value = ''
   try {
-    const [statsResult, caseResult, clueResult] = await Promise.all([
+    const [statsResult, caseResult, clueResult] = await Promise.allSettled([
       getDashboardStats(),
       listCases({ page: 1, size: 30, keyword: caseKeyword.value || undefined }),
       listClues({ page: 1, size: 30, keyword: clueKeyword.value || undefined }),
     ])
-    stats.value = statsResult
-    cases.value = caseResult.items || []
-    clues.value = clueResult.items || []
-  } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '数据加载失败，请检查网络后重试'
+    if (statsResult.status === 'fulfilled') {
+      stats.value = statsResult.value
+    }
+    if (caseResult.status === 'fulfilled') {
+      cases.value = caseResult.value.items || []
+    }
+    if (clueResult.status === 'fulfilled') {
+      clues.value = clueResult.value.items || []
+    }
+
+    const failedResult = [statsResult, caseResult, clueResult].find(
+      (result) => result.status === 'rejected',
+    )
+    if (failedResult?.status === 'rejected') {
+      loadError.value =
+        failedResult.reason instanceof Error
+          ? failedResult.reason.message
+          : '部分数据加载失败，请检查网络后重试'
+    }
   } finally {
     loading.value = false
   }
 }
 
 function editCase(item: MissingPersonCaseVO) {
+  batchReviewingIndex.value = null
   editingCase.value = item
   caseImportWarnings.value = []
   caseSaveError.value = ''
@@ -117,6 +146,7 @@ function editCase(item: MissingPersonCaseVO) {
 }
 
 function createCase() {
+  batchReviewingIndex.value = null
   editingCase.value = null
   caseImportWarnings.value = []
   caseSaveError.value = ''
@@ -125,19 +155,44 @@ function createCase() {
 
 function openCaseImport() {
   caseImportError.value = ''
+  caseImportAiSuggestion.value = ''
   caseImportVisible.value = true
+}
+
+function openCaseBatchImport() {
+  caseBatchImportError.value = ''
+  caseBatchImportResult.value = null
+  caseBatchReviewed.value = []
+  caseBatchImportVisible.value = true
 }
 
 function closeCaseImport() {
   if (caseImporting.value) return
   caseImportVisible.value = false
+  caseImportAiSuggestion.value = ''
+}
+
+function closeCaseBatchImport() {
+  if (caseBatchImporting.value) return
+  caseBatchImportVisible.value = false
+  caseBatchImportResult.value = null
+  caseBatchReviewed.value = []
+  caseBatchImportError.value = ''
 }
 
 async function previewImport(request: CaseImportRequest) {
   caseImporting.value = true
   caseImportError.value = ''
+  caseImportAiSuggestion.value = ''
   try {
     const preview = await previewCaseImport(request)
+    if (!request.ai && preview.aiRecommended && preview.aiAvailable) {
+      const count = preview.extractedFieldCount || 0
+      caseImportAiSuggestion.value = count
+        ? `规则解析只识别到 ${count} 个字段，建议使用 AI 智能解析后再核对。`
+        : '规则解析未识别到有效寻亲字段，建议使用 AI 智能解析后再核对。'
+      return
+    }
     editingCase.value = {
       ...preview.caseData,
       status: 'DRAFT',
@@ -156,12 +211,78 @@ async function previewImport(request: CaseImportRequest) {
   }
 }
 
+async function previewImportDocument(file: File) {
+  caseImporting.value = true
+  caseImportError.value = ''
+  try {
+    const preview = await previewCaseImportDocument(file)
+    editingCase.value = {
+      ...preview.caseData,
+      status: 'DRAFT',
+      priority: preview.caseData.priority ?? 0,
+    }
+    caseImportWarnings.value = preview.warnings?.length
+      ? preview.warnings
+      : ['AI 自动识别结果可能存在遗漏，请逐项核对后再保存。']
+    caseImportVisible.value = false
+    caseEditorVisible.value = true
+  } catch (error) {
+    caseImportError.value = error instanceof Error ? error.message : '文档解析失败，请重试'
+  } finally {
+    caseImporting.value = false
+  }
+}
+
+async function previewBatchImport(payload: CaseImportBatchRequest, files: File[]) {
+  caseBatchImporting.value = true
+  caseBatchImportError.value = ''
+  try {
+    const [textResult, documentResult] = await Promise.all([
+      payload.items.length ? previewCaseImportBatch(payload) : Promise.resolve(null),
+      files.length ? previewCaseImportDocuments(files) : Promise.resolve(null),
+    ])
+    const textItems = textResult?.items || []
+    const documentItems =
+      documentResult?.items.map((item) => ({ ...item, index: item.index + textItems.length })) || []
+    const items = [...textItems, ...documentItems]
+    caseBatchImportResult.value = {
+      items,
+      succeeded: items.filter((item) => item.preview).length,
+      failed: items.filter((item) => !item.preview).length,
+    }
+  } catch (error) {
+    caseBatchImportError.value = error instanceof Error ? error.message : '批量解析失败，请重试'
+  } finally {
+    caseBatchImporting.value = false
+  }
+}
+
+function reviewBatchImport(item: CaseImportBatchItem) {
+  if (!item.preview) return
+  batchReviewingIndex.value = item.index
+  editingCase.value = {
+    ...item.preview.caseData,
+    status: 'DRAFT',
+    priority: item.preview.caseData.priority ?? 0,
+  }
+  caseImportWarnings.value = item.preview.warnings?.length
+    ? item.preview.warnings
+    : ['AI 自动识别结果可能存在遗漏，请逐项核对后再保存。']
+  caseBatchImportVisible.value = false
+  caseEditorVisible.value = true
+}
+
 function closeCaseEditor() {
   if (caseSaving.value) return
   caseEditorVisible.value = false
+  if (batchReviewingIndex.value !== null) {
+    batchReviewingIndex.value = null
+    caseBatchImportVisible.value = true
+  }
 }
 
 async function submitCase(formValue: MissingPersonCaseVO) {
+  const savedBatchIndex = batchReviewingIndex.value
   const payload: MissingPersonCasePayload = {
     metadata: editingCase.value?.name ? { name: editingCase.value.name } : undefined,
     spec: { ...formValue },
@@ -172,6 +293,11 @@ async function submitCase(formValue: MissingPersonCaseVO) {
     await saveCase(payload)
     caseEditorVisible.value = false
     await refreshAll()
+    if (savedBatchIndex !== null) {
+      caseBatchReviewed.value = [...new Set([...caseBatchReviewed.value, savedBatchIndex])]
+      batchReviewingIndex.value = null
+      caseBatchImportVisible.value = true
+    }
     setMessage(editingCase.value?.name ? '案例修改已保存' : '新案例已保存')
   } catch (error) {
     caseSaveError.value = error instanceof Error ? error.message : '保存失败，请稍后重试'
@@ -209,6 +335,7 @@ async function confirmCaseDelete() {
     await deleteCase(name)
     pendingDeleteCase.value = null
     await refreshAll()
+    cases.value = cases.value.filter((item) => item.name !== name)
     setMessage('案例已删除')
   } finally {
     deletingCase.value = false
@@ -251,6 +378,7 @@ async function confirmClueDelete() {
     await deleteClue(name)
     pendingDeleteClue.value = null
     await refreshAll()
+    clues.value = clues.value.filter((item) => item.name !== name)
     setMessage('线索已删除')
   } finally {
     deletingClue.value = false
@@ -278,6 +406,9 @@ onMounted(refreshAll)
           </VButton>
           <VButton data-testid="import-case" type="secondary" @click="openCaseImport">
             <RiDownloadCloudLine /> 从网页导入
+          </VButton>
+          <VButton data-testid="batch-import-case" type="secondary" @click="openCaseBatchImport">
+            <RiDownloadCloudLine /> 批量 AI 导入
           </VButton>
           <VButton data-testid="create-case" type="primary" @click="createCase">
             <RiAddLine /> 新增案例
@@ -389,8 +520,21 @@ onMounted(refreshAll)
         :visible="caseImportVisible"
         :loading="caseImporting"
         :error="caseImportError"
+        :suggest-ai="Boolean(caseImportAiSuggestion)"
+        :suggestion="caseImportAiSuggestion"
         @close="closeCaseImport"
         @preview="previewImport"
+        @preview-document="previewImportDocument"
+      />
+      <CaseBatchImportModal
+        :visible="caseBatchImportVisible"
+        :loading="caseBatchImporting"
+        :error="caseBatchImportError"
+        :result="caseBatchImportResult"
+        :reviewed="caseBatchReviewed"
+        @close="closeCaseBatchImport"
+        @preview="previewBatchImport"
+        @review="reviewBatchImport"
       />
       <ConfirmActionModal
         v-if="pendingDeleteCase"

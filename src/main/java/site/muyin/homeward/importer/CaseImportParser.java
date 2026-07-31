@@ -78,6 +78,9 @@ public class CaseImportParser {
         var preview = new CaseImportPreview();
         preview.setCaseData(caseData);
         preview.setExtractedFieldCount(countExtractedFields(caseData));
+        preview.setParser("RULE");
+        preview.setAiRecommended(!hasText(caseData.getPersonName())
+            || preview.getExtractedFieldCount() < 3);
         if (!hasText(caseData.getPersonName())) {
             preview.getWarnings().add("未识别到姓名，请在保存前补充");
         }

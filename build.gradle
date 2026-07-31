@@ -14,8 +14,10 @@ dependencies {
     implementation platform('run.halo.tools.platform:plugin:2.25.0')
     implementation 'org.jsoup:jsoup:1.18.3'
     compileOnly 'run.halo.app:api'
+    compileOnly 'run.halo.aifoundation:api:1.0.0-beta.6'
 
     testImplementation 'run.halo.app:api'
+    testImplementation 'run.halo.aifoundation:api:1.0.0-beta.6'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

@@ -12,4 +12,14 @@ public class CaseImportPreview {
     private int extractedFieldCount;
 
     private List<String> warnings = new ArrayList<>();
+
+    private boolean aiGenerated;
+
+    private boolean aiAvailable;
+
+    private boolean aiRecommended;
+
+    private String parser;
+
+    private String modelName;
 }

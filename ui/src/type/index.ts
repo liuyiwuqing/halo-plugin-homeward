@@ -65,10 +65,35 @@ export interface MissingPersonCasePayload {
 export interface CaseImportRequest {
   sourceUrl?: string
   pageContent?: string
+  ai?: boolean
+  modelName?: string
 }
 
 export interface CaseImportPreview {
   caseData: MissingPersonCaseVO
   extractedFieldCount: number
   warnings: string[]
+  aiGenerated?: boolean
+  aiAvailable?: boolean
+  aiRecommended?: boolean
+  parser?: string
+  modelName?: string
+}
+
+export interface CaseImportBatchRequest {
+  items: CaseImportRequest[]
+  modelName?: string
+}
+
+export interface CaseImportBatchItem {
+  index: number
+  sourceUrl?: string
+  preview?: CaseImportPreview
+  error?: string
+}
+
+export interface CaseImportBatchPreview {
+  items: CaseImportBatchItem[]
+  succeeded: number
+  failed: number
 }

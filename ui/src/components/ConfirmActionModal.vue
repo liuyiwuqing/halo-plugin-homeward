@@ -20,6 +20,7 @@ const emit = defineEmits<{
 
 <template>
   <VModal
+    class="homeward-confirm-modal"
     :width="460"
     title="确认操作"
     :layer-closable="false"

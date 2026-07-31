@@ -9,18 +9,24 @@ const props = defineProps<{
   visible: boolean
   loading?: boolean
   error?: string
+  suggestAi?: boolean
+  suggestion?: string
 }>()
 
 const emit = defineEmits<{
   close: []
   preview: [value: CaseImportRequest]
+  previewDocument: [file: File]
 }>()
 
 const form = reactive({
   sourceUrl: '',
   pageContent: '',
+  useAi: false,
 })
 const validationError = ref('')
+const selectedFile = ref<File | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const displayedError = computed(() => props.error || validationError.value)
 
 watch(
@@ -29,6 +35,9 @@ watch(
     if (!visible) return
     form.sourceUrl = ''
     form.pageContent = ''
+    form.useAi = false
+    selectedFile.value = null
+    if (fileInput.value) fileInput.value.value = ''
     validationError.value = ''
   },
 )
@@ -42,9 +51,29 @@ function isHttpUrl(value: string) {
   }
 }
 
+function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  selectedFile.value = input.files?.[0] || null
+  if (selectedFile.value) {
+    form.sourceUrl = ''
+    form.pageContent = ''
+    form.useAi = true
+  }
+  validationError.value = ''
+}
+
 function submit() {
   const sourceUrl = form.sourceUrl.trim() || undefined
   const pageContent = form.pageContent.trim() || undefined
+  if (selectedFile.value) {
+    if (!form.useAi) {
+      validationError.value = '文档导入需要开启 AI 智能识别'
+      return
+    }
+    validationError.value = ''
+    emit('previewDocument', selectedFile.value)
+    return
+  }
   if (!sourceUrl && !pageContent) {
     validationError.value = '请填写网页地址，或粘贴网页正文'
     return
@@ -54,7 +83,12 @@ function submit() {
     return
   }
   validationError.value = ''
-  emit('preview', { sourceUrl, pageContent })
+  emit('preview', { sourceUrl, pageContent, ...(form.useAi ? { ai: true } : {}) })
+}
+
+function useAiSuggestion() {
+  form.useAi = true
+  submit()
 }
 </script>
 
@@ -63,7 +97,7 @@ function submit() {
     class="homeward-import-modal"
     :visible="visible"
     :width="640"
-    title="从网页导入寻亲资料"
+    title="从网页或文档导入寻亲资料"
     :centered="false"
     :layer-closable="false"
     :body-class="['homeward-import-modal-body']"
@@ -79,8 +113,38 @@ function submit() {
           <RiFileCopy2Line aria-hidden="true" />
           <p><strong>复制粘贴兜底</strong><span>登录、反爬或动态网页可复制正文后粘贴。</span></p>
         </div>
+        <div>
+          <RiFileCopy2Line aria-hidden="true" />
+          <p><strong>AI 智能提取</strong><span>从自然语言、PDF 或 Word 中识别案例字段。</span></p>
+        </div>
+      </div>
+      <div
+        v-if="suggestAi"
+        class="homeward-import-ai-suggestion"
+        data-testid="case-import-ai-suggestion"
+        role="status"
+      >
+        <div>
+          <strong>网页字段不完整</strong>
+          <span>{{ suggestion || '规则解析没有识别到足够的寻亲字段，建议交给 AI 重新整理。' }}</span>
+        </div>
+        <VButton
+          data-testid="use-ai-import"
+          type="secondary"
+          :disabled="loading"
+          @click="useAiSuggestion"
+        >
+          使用 AI 智能解析
+        </VButton>
       </div>
       <form class="homeward-import-form" @submit.prevent="submit">
+        <label class="homeward-import-ai-toggle">
+          <input v-model="form.useAi" type="checkbox" data-testid="case-import-ai" />
+          <span>
+            <strong>使用 AI 智能识别</strong>
+            <small>使用 AI Foundation 配置的默认语言模型；结果仍需人工核对。</small>
+          </span>
+        </label>
         <FormKit
           v-model="form.sourceUrl"
           outer-class="homeward-form-field"
@@ -101,6 +165,18 @@ function submit() {
           help="填写后只解析粘贴内容，不会访问上面的网页地址。"
           :rows="10"
         />
+        <label class="homeward-import-file-field">
+          <span>上传文档（可选）</span>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.md,.html,.htm,.json,.rtf"
+            :disabled="loading"
+            data-testid="case-import-file"
+            @change="handleFileChange"
+          />
+          <small>{{ selectedFile?.name || '支持 PDF、Word、TXT、Markdown、HTML，单个不超过 10 MB。' }}</small>
+        </label>
       </form>
       <p class="homeward-import-safety-note">
         导入只生成待核对草稿，不会自动保存或发布。请确认信息来源、隐私授权和字段准确性。

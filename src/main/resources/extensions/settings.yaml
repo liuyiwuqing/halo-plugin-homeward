@@ -100,3 +100,35 @@ spec:
           clearable: true
           validation: required
           help: 可搜索并选择一个或多个 Halo 用户。
+    - group: ai
+      label: AI 解析
+      value:
+        enabled: true
+        modelName: ""
+        documentModelName: ""
+      formSchema:
+        - $formkit: switch
+          name: enabled
+          label: 启用 AI 解析
+          value: true
+          help: AI 只负责生成待核对草稿，不会自动保存或发布案例。
+        - $formkit: aiModelSelector
+          name: modelName
+          label: 文本与网页解析模型
+          modelType: language
+          available: true
+          clearable: true
+          placeholder: 留空使用 AI Foundation 默认语言模型
+        - $formkit: aiModelSelector
+          name: documentModelName
+          label: 文档解析模型
+          modelType: language
+          available: true
+          requiredCapabilities:
+            language:
+              fileInput: true
+              inputSources:
+                - data
+          clearable: true
+          placeholder: 可选，优先选择支持文件输入的模型
+          help: PDF、Word 等文档需要模型支持 file input；留空时复用上面的模型。

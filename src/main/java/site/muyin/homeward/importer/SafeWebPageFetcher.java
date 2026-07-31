@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,6 +24,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 @Component
+@Slf4j
 public class SafeWebPageFetcher implements WebPageFetcher {
 
     private static final int MAX_RESPONSE_BYTES = 1_000_000;
@@ -93,7 +95,58 @@ public class SafeWebPageFetcher implements WebPageFetcher {
                     "来源网页内容超过 1 MB 限制", null);
             }
             Charset charset = responseCharset(response, bytes);
-            return new FetchedWebPage(safeTarget.toString(), new String(bytes, charset));
+            return enrichMcaDynamicDetail(safeTarget, new String(bytes, charset));
+        }
+    }
+
+    private FetchedWebPage enrichMcaDynamicDetail(URI source, String content) {
+        var detailApi = McaMissingPersonPageResolver.detailApiUri(source);
+        if (detailApi.isEmpty()) {
+            return new FetchedWebPage(source.toString(), content);
+        }
+        try {
+            String apiResponse = fetchMcaDetailJson(detailApi.get());
+            return new FetchedWebPage(source.toString(),
+                McaMissingPersonPageResolver.enrich(source, content, apiResponse));
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            log.warn("Unable to enrich MCA dynamic import page: path={}, cause={}", source.getPath(),
+                error.getClass().getSimpleName());
+        } catch (Exception error) {
+            log.warn("Unable to enrich MCA dynamic import page: path={}, cause={}", source.getPath(),
+                error.getClass().getSimpleName());
+        }
+        return new FetchedWebPage(source.toString(), content);
+    }
+
+    private String fetchMcaDetailJson(URI target) throws IOException, InterruptedException {
+        URI safeTarget = validatePublicTarget(target);
+        var request = HttpRequest.newBuilder(safeTarget)
+            .GET()
+            .timeout(REQUEST_TIMEOUT)
+            .header("Accept", "application/json")
+            .header("User-Agent", "Halo-Homeward-Importer/1.0")
+            .build();
+        HttpResponse<InputStream> response = httpClient.send(request,
+            HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream body = response.body()) {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("MCA detail API returned HTTP " + response.statusCode());
+            }
+            String contentType = response.headers().firstValue("content-type").orElse("")
+                .toLowerCase(Locale.ROOT);
+            if (!contentType.isBlank() && !contentType.startsWith("application/json")) {
+                throw new IOException("MCA detail API did not return JSON");
+            }
+            long declaredLength = response.headers().firstValueAsLong("content-length").orElse(-1);
+            if (declaredLength > MAX_RESPONSE_BYTES) {
+                throw new IOException("MCA detail API response is too large");
+            }
+            byte[] bytes = body.readNBytes(MAX_RESPONSE_BYTES + 1);
+            if (bytes.length > MAX_RESPONSE_BYTES) {
+                throw new IOException("MCA detail API response is too large");
+            }
+            return new String(bytes, responseCharset(response, bytes));
         }
     }
 

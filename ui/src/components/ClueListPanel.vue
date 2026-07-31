@@ -124,7 +124,14 @@ function updateKeyword(event: Event) {
           >
             查看并处理
           </VButton>
-          <VButton size="sm" type="danger" @click="emit('delete', item)">删除</VButton>
+          <VButton
+            :data-testid="`delete-clue-${item.name}`"
+            size="sm"
+            type="danger"
+            @click="emit('delete', item)"
+          >
+            删除
+          </VButton>
         </div>
       </article>
     </div>

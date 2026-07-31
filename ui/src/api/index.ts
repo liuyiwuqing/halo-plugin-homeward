@@ -1,6 +1,8 @@
 import { axiosInstance } from '@halo-dev/api-client'
 import type {
   CaseImportPreview,
+  CaseImportBatchPreview,
+  CaseImportBatchRequest,
   CaseImportRequest,
   ClueReportVO,
   ClueStatus,
@@ -30,6 +32,38 @@ export async function previewCaseImport(payload: CaseImportRequest) {
   const { data } = await axiosInstance.post<CaseImportPreview>(
     `${CONSOLE_BASE}/cases/import/preview`,
     payload,
+  )
+  return data
+}
+
+export async function previewCaseImportDocument(file: File, options?: CaseImportRequest) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (options?.modelName) formData.append('modelName', options.modelName)
+  if (options?.sourceUrl) formData.append('sourceUrl', options.sourceUrl)
+  const { data } = await axiosInstance.post<CaseImportPreview>(
+    `${CONSOLE_BASE}/cases/import/preview/document`,
+    formData,
+  )
+  return data
+}
+
+export async function previewCaseImportBatch(payload: CaseImportBatchRequest) {
+  const { data } = await axiosInstance.post<CaseImportBatchPreview>(
+    `${CONSOLE_BASE}/cases/import/batch/preview`,
+    payload,
+  )
+  return data
+}
+
+export async function previewCaseImportDocuments(files: File[], options?: CaseImportRequest) {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  if (options?.modelName) formData.append('modelName', options.modelName)
+  if (options?.sourceUrl) formData.append('sourceUrl', options.sourceUrl)
+  const { data } = await axiosInstance.post<CaseImportBatchPreview>(
+    `${CONSOLE_BASE}/cases/import/batch/preview/documents`,
+    formData,
   )
   return data
 }
