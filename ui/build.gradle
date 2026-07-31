@@ -5,6 +5,12 @@ plugins {
 
 group 'site.muyin.homeward.ui'
 
+node {
+    download = true
+    version = '22.22.0'
+    pnpmVersion = '11.0.8'
+}
+
 tasks.register('pnpmBuild', PnpmTask) {
     group = 'build'
     description = 'Build the UI project using pnpm'
