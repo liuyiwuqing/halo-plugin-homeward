@@ -143,4 +143,49 @@ describe('CaseEditorModal', () => {
     expect(wrapper.emitted('save')).toBeUndefined()
     expect(wrapper.get('[role="alert"]').text()).toContain('来源链接格式不正确')
   })
+
+  it('导入的相册照片会回填并在保存时保留', async () => {
+    const gallery = ['https://cdn.example.org/photo-1.jpg', 'https://cdn.example.org/photo-2.jpg']
+    const wrapper = mount(CaseEditorModal, {
+      props: {
+        visible: true,
+        caseData: {
+          personName: '林小满',
+          coverImage: 'https://cdn.example.org/cover.jpg',
+          gallery,
+        },
+      },
+      global: { components: { FormKit: FormKitStub } },
+    })
+
+    expect(wrapper.findAll('[data-testid="gallery-editor"] img')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="gallery-editor"]').text()).toContain('2 张')
+
+    await wrapper.get('[data-testid="save-case"]').trigger('click')
+
+    expect(wrapper.emitted('save')?.[0]).toEqual([
+      expect.objectContaining({ coverImage: 'https://cdn.example.org/cover.jpg', gallery }),
+    ])
+  })
+
+  it('可以校验、添加和移除相册照片', async () => {
+    const wrapper = mount(CaseEditorModal, {
+      props: { visible: true, caseData: { personName: '林小满' } },
+      global: { components: { FormKit: FormKitStub } },
+    })
+    const input = wrapper.get('[aria-label="添加照片地址"]')
+    const addButton = wrapper.findAll('button').find((button) => button.text() === '添加照片')
+    expect(addButton).toBeDefined()
+
+    await input.setValue('not-a-url')
+    await addButton!.trigger('click')
+    expect(wrapper.text()).toContain('照片地址必须是完整的 http(s) 地址或站内路径')
+
+    await input.setValue('/upload/photo.jpg')
+    await addButton!.trigger('click')
+    expect(wrapper.findAll('[data-testid="gallery-editor"] img')).toHaveLength(1)
+
+    await wrapper.get('[aria-label="移除第 1 张照片"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="gallery-editor"] img')).toHaveLength(0)
+  })
 })

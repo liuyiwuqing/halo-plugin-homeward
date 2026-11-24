@@ -55,6 +55,12 @@ public class CaseImportParser {
         extractStructuredData(document, values);
         extractMetadata(document, values);
 
+        var images = PageImageExtractor.extract(document, sourceUrl);
+        String coverImage = PageImageExtractor.resolve(value(values, "coverImage"), sourceUrl);
+        if (!hasText(coverImage) && !images.isEmpty()) {
+            coverImage = images.get(0);
+        }
+
         var caseData = new MissingPersonCaseVO();
         caseData.setPersonName(value(values, "personName"));
         caseData.setGender(normalizeGender(value(values, "gender")));
@@ -69,7 +75,12 @@ public class CaseImportParser {
         caseData.setContactName(value(values, "contactName"));
         caseData.setContactPhone(value(values, "contactPhone"));
         caseData.setTitle(firstText(value(values, "title"), cleanTitle(document.title())));
-        caseData.setCoverImage(value(values, "coverImage"));
+        String primaryImage = coverImage;
+        caseData.setCoverImage(primaryImage);
+        caseData.setGallery(images.stream()
+            .filter(image -> !image.equals(primaryImage))
+            .limit(PageImageExtractor.MAX_IMAGES)
+            .toList());
         caseData.setSourceName(firstText(value(values, "sourceName"), sourceName(document, sourceUrl)));
         caseData.setSourceUrl(sourceUrl);
         caseData.setStatus(CaseStatus.DRAFT);
@@ -388,6 +399,11 @@ public class CaseImportParser {
             count++;
         }
         if (value.getCurrentAge() != null) {
+            count++;
+        }
+        if (hasText(value.getCoverImage())) {
+            count++;
+        } else if (value.getGallery() != null && !value.getGallery().isEmpty()) {
             count++;
         }
         return count;

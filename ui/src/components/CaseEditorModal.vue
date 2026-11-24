@@ -18,6 +18,8 @@ const emit = defineEmits<{
 
 const title = computed(() => (props.caseData?.name ? '编辑寻亲案例' : '新增寻亲案例'))
 const validationError = ref('')
+const newGalleryUrl = ref('')
+const galleryError = ref('')
 const displayedError = computed(() => props.error || validationError.value)
 const slugLocked = computed(() =>
   Boolean(
@@ -39,6 +41,7 @@ const form = reactive<MissingPersonCaseVO>({
   missingLocation: '',
   hometown: '',
   coverImage: '',
+  gallery: [],
   physicalFeatures: '',
   description: '',
   contactName: '',
@@ -53,6 +56,8 @@ watch(
   () => [props.visible, props.caseData] as const,
   () => {
     validationError.value = ''
+    newGalleryUrl.value = ''
+    galleryError.value = ''
     Object.assign(form, {
       slug: '',
       personName: '',
@@ -65,6 +70,7 @@ watch(
       missingLocation: '',
       hometown: '',
       coverImage: '',
+      gallery: [],
       physicalFeatures: '',
       description: '',
       contactName: '',
@@ -88,6 +94,34 @@ function isHttpUrl(value: string) {
   }
 }
 
+function isImageUrl(value: string) {
+  return isHttpUrl(value) || (value.startsWith('/') && !value.startsWith('//'))
+}
+
+function removeGalleryImage(index: number) {
+  form.gallery = (form.gallery || []).filter((_, position) => position !== index)
+  galleryError.value = ''
+}
+
+function addGalleryImage() {
+  const url = newGalleryUrl.value.trim()
+  if (!isImageUrl(url)) {
+    galleryError.value = '照片地址必须是完整的 http(s) 地址或站内路径'
+    return
+  }
+  if ((form.gallery || []).includes(url)) {
+    galleryError.value = '这张照片已在相册中'
+    return
+  }
+  if ((form.gallery || []).length >= 20) {
+    galleryError.value = '相册最多保存 20 张照片'
+    return
+  }
+  form.gallery = [...(form.gallery || []), url]
+  newGalleryUrl.value = ''
+  galleryError.value = ''
+}
+
 function submit() {
   if (!form.personName?.trim()) {
     validationError.value = '请填写失踪人员姓名'
@@ -103,6 +137,10 @@ function submit() {
   }
   if (form.sourceUrl && !isHttpUrl(form.sourceUrl.trim())) {
     validationError.value = '来源链接格式不正确，请填写以 http:// 或 https:// 开头的地址'
+    return
+  }
+  if (form.gallery?.some((url) => !isImageUrl(url))) {
+    validationError.value = '相册中有无效的照片地址，请移除后重试'
     return
   }
   validationError.value = ''
@@ -271,6 +309,43 @@ function submit() {
               :accepts="['image/*']"
               width="100%"
             />
+          </div>
+          <div class="homeward-gallery-editor" data-testid="gallery-editor">
+            <div class="homeward-gallery-heading">
+              <span>相册照片</span>
+              <span class="homeward-gallery-count">{{ form.gallery?.length || 0 }} 张</span>
+            </div>
+            <div v-if="form.gallery?.length" class="homeward-gallery-list">
+              <div
+                v-for="(url, index) in form.gallery"
+                :key="`${url}-${index}`"
+                class="homeward-gallery-item"
+              >
+                <img :src="url" :alt="`相册照片 ${index + 1}`" loading="lazy" />
+                <button
+                  type="button"
+                  class="homeward-gallery-remove"
+                  :aria-label="`移除第 ${index + 1} 张照片`"
+                  @click="removeGalleryImage(index)"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <p v-else class="homeward-gallery-empty">导入网页或手动添加照片后，会显示在这里。</p>
+            <div class="homeward-gallery-add">
+              <input
+                v-model="newGalleryUrl"
+                type="url"
+                placeholder="粘贴照片地址"
+                aria-label="添加照片地址"
+                @keydown.enter.prevent="addGalleryImage"
+              />
+              <VButton type="secondary" size="sm" @click="addGalleryImage">添加照片</VButton>
+            </div>
+            <p v-if="galleryError" class="homeward-gallery-error" role="alert">
+              {{ galleryError }}
+            </p>
           </div>
           <div class="homeward-display-copy">
             <FormKit

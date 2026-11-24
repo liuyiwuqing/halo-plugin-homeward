@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title th:text="${pageTitle} + ' · 归航寻亲'">归航寻亲</title>
+    <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-public.css" />
+  </head>
+  <body class="homeward-public-body">
+    <main class="homeward-section">
+      <div class="homeward-state">
+        <p>归航寻亲</p>
+        <h1 th:text="${pageTitle}">案例暂不可查看</h1>
+        <span th:text="${pageMessage}">请稍后再试。</span>
+        <a class="homeward-link" href="/homeward">返回案例列表 →</a>
+      </div>
+    </main>
+  </body>
+</html>

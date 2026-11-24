@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" xmlns:th="https://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="referrer" content="no-referrer" />
+        <title>查询线索进度｜归航寻亲</title>
+        <link
+            rel="stylesheet"
+            href="/plugins/homeward/assets/static/homeward/homeward-public.css"
+        />
+        <link
+            rel="stylesheet"
+            href="/plugins/homeward/assets/static/homeward/homeward-receipt.css"
+        />
+    </head>
+    <body class="homeward-public-body">
+        <main class="homeward-receipt-page" id="homeward-receipt-page">
+            <nav aria-label="返回导航"><a href="/homeward">← 全部寻亲档案</a></nav>
+            <h1>查询线索处理进度</h1>
+            <p>
+                请输入提交成功后保存的查询凭证。此页面仅显示处理状态和时间，不展示线索内容、联系人信息或内部处理记录。
+            </p>
+            <p>凭证不会加入网址或保存在浏览器中，请自行妥善保管，勿公开分享。</p>
+            <form class="homeward-receipt-query" data-homeward-receipt-form autocomplete="off">
+                <label
+                    >查询凭证<input
+                        name="receiptToken"
+                        type="text"
+                        required
+                        minlength="43"
+                        maxlength="43"
+                        pattern="[A-Za-z0-9_-]{43}"
+                        autocomplete="off"
+                        autocapitalize="none"
+                        spellcheck="false"
+                        aria-describedby="homeward-receipt-help"
+                /></label>
+                <span id="homeward-receipt-help">由 43 位字母、数字、短横线或下划线组成。</span>
+                <button type="submit">查询进度</button>
+            </form>
+            <p data-homeward-receipt-message role="status" aria-live="polite"></p>
+            <section
+                class="homeward-receipt-result"
+                data-homeward-receipt-result
+                hidden
+                aria-label="处理进度"
+                aria-live="polite"
+            >
+                <h2 data-receipt-status></h2>
+                <dl>
+                    <dt>提交时间</dt>
+                    <dd><time data-receipt-submitted></time></dd>
+                    <dt>更新时间</dt>
+                    <dd><time data-receipt-updated></time></dd>
+                </dl>
+                <p data-receipt-public-message></p>
+            </section>
+            <noscript><p>请启用 JavaScript 后查询线索进度。</p></noscript>
+        </main>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-common.js"></script>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-receipt.js"></script>
+    </body>
+</html>

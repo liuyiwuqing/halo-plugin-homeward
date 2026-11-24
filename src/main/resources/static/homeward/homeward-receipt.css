@@ -1,0 +1,112 @@
+.homeward-receipt-delivery {
+  border-top: 1px solid var(--homeward-line);
+  padding-top: 1.25rem;
+}
+.homeward-receipt-delivery h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+}
+.homeward-receipt-delivery p {
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+.homeward-receipt-token-card {
+  margin: 1rem 0;
+}
+.homeward-receipt-token-card input {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.homeward-receipt-token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+.homeward-receipt-token-actions button,
+.homeward-receipt-query button {
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--homeward-accent-dark);
+  background: var(--homeward-accent-dark);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.homeward-receipt-delivery[hidden],
+.homeward-receipt-result[hidden] {
+  display: none;
+}
+.homeward-receipt-page {
+  max-width: 54rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+}
+.homeward-receipt-page h1 {
+  margin: 2rem 0 1rem;
+  font-family: var(--homeward-serif);
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+.homeward-receipt-page > p {
+  line-height: 1.8;
+  color: var(--homeward-muted);
+}
+.homeward-receipt-query {
+  display: grid;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+.homeward-receipt-query label {
+  display: grid;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+.homeward-receipt-query input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--homeward-line);
+  background: var(--homeward-card);
+  color: var(--homeward-ink);
+  font:
+    1rem ui-monospace,
+    monospace;
+}
+.homeward-receipt-query button {
+  justify-self: start;
+}
+.homeward-receipt-query button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.homeward-receipt-result {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--homeward-card);
+  border: 1px solid var(--homeward-line);
+}
+.homeward-receipt-result h2 {
+  margin: 0 0 1rem;
+  font-family: var(--homeward-serif);
+}
+.homeward-receipt-result dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.8rem 1rem;
+  font-size: 0.9rem;
+}
+.homeward-receipt-result dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.homeward-receipt-result p {
+  line-height: 1.7;
+}
+.homeward-receipt-page a {
+  color: var(--homeward-accent-dark);
+  text-underline-offset: 0.25em;
+}
+.homeward-receipt-page :focus-visible {
+  outline: 3px solid var(--homeward-accent);
+  outline-offset: 3px;
+}

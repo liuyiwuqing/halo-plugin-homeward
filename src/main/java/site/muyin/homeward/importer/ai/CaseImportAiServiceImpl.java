@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -30,6 +31,7 @@ import run.halo.app.plugin.extensionpoint.ExtensionGetter;
 import site.muyin.homeward.enums.CaseStatus;
 import site.muyin.homeward.importer.CaseImportAiService;
 import site.muyin.homeward.importer.CaseImportParser;
+import site.muyin.homeward.importer.PageImageExtractor;
 import site.muyin.homeward.model.CaseImportPreview;
 import site.muyin.homeward.model.CaseImportRequest;
 import site.muyin.homeward.model.MissingPersonCaseVO;
@@ -55,7 +57,9 @@ public class CaseImportAiServiceImpl implements CaseImportAiService {
     private static final String FIELD_INSTRUCTIONS = """
         请提取这些字段：title、personName、gender、birthDate、missingDate、missingAge、currentAge、
         missingLocation、hometown、physicalFeatures、description、contactName、contactPhone、
-        sourceName、coverImage。不要根据常识推断性别、年龄、日期或联系方式。
+        sourceName、coverImage、gallery。gallery 是照片地址字符串数组；只在来源里明确出现照片地址时填写，
+        不要编造图片地址。网页照片已由规则解析提取，AI 不需要推断人脸或图片内容。
+        不要根据常识推断性别、年龄、日期或联系方式。
         """;
 
     private final ExtensionGetter extensionGetter;
@@ -248,7 +252,9 @@ public class CaseImportAiServiceImpl implements CaseImportAiService {
         copyIfBlank(() -> data.getContactName(), data::setContactName, draft.getContactName());
         copyIfBlank(() -> data.getContactPhone(), data::setContactPhone, draft.getContactPhone());
         copyIfBlank(() -> data.getSourceName(), data::setSourceName, draft.getSourceName());
-        copyIfBlank(() -> data.getCoverImage(), data::setCoverImage, draft.getCoverImage());
+        copyIfBlank(() -> data.getCoverImage(), data::setCoverImage,
+            PageImageExtractor.resolve(draft.getCoverImage(), sourceUrl));
+        mergeGallery(data, draft.getGallery(), sourceUrl);
         if (!hasText(data.getSourceUrl())) {
             data.setSourceUrl(sourceUrl);
         }
@@ -273,6 +279,25 @@ public class CaseImportAiServiceImpl implements CaseImportAiService {
             addWarning(preview, "AI 未识别到姓名，请在保存前补充");
         }
         return preview;
+    }
+
+    private static void mergeGallery(MissingPersonCaseVO data, List<String> candidate,
+                                     String sourceUrl) {
+        if (candidate == null || candidate.isEmpty()) {
+            return;
+        }
+        var merged = new LinkedHashSet<String>();
+        if (data.getGallery() != null) {
+            merged.addAll(data.getGallery());
+        }
+        for (String value : candidate) {
+            String resolved = PageImageExtractor.resolve(value, sourceUrl);
+            if (resolved != null) {
+                merged.add(resolved);
+            }
+        }
+        merged.remove(data.getCoverImage());
+        data.setGallery(merged.stream().limit(PageImageExtractor.MAX_IMAGES).toList());
     }
 
     private static CaseImportPreview emptyPreview(CaseImportRequest request, String filename) {
@@ -363,6 +388,7 @@ public class CaseImportAiServiceImpl implements CaseImportAiService {
         count += hasText(data.getContactPhone()) ? 1 : 0;
         count += hasText(data.getSourceName()) ? 1 : 0;
         count += hasText(data.getCoverImage()) ? 1 : 0;
+        count += data.getGallery() == null ? 0 : Math.min(data.getGallery().size(), 1);
         return count;
     }
 
@@ -426,5 +452,6 @@ public class CaseImportAiServiceImpl implements CaseImportAiService {
         private String contactPhone;
         private String sourceName;
         private String coverImage;
+        private List<String> gallery;
     }
 }

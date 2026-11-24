@@ -239,6 +239,75 @@ class CaseImportServiceTest {
     }
 
     @Test
+    void pageImagesBecomeAbsoluteCoverAndGalleryWithoutDecorativeImages() {
+        WebPageFetcher fetcher = sourceUrl -> Mono.error(new AssertionError("不应请求网络"));
+        var service = new CaseImportServiceImpl(
+            new CaseImportParser(new ObjectMapper()), fetcher);
+        var request = new CaseImportRequest();
+        request.setSourceUrl("https://example.org/cases/zhao-yuan");
+        request.setPageContent("""
+            <html>
+              <head><title>寻找赵远</title></head>
+              <body>
+                <img class="site-logo" src="/logo.png" width="120" height="40">
+                <img src="/images/spacer.gif" width="4" height="4">
+                <img alt="失踪人照片" data-src="/uploads/zhao-main.jpg">
+                <img src="https://cdn.example.org/zhao-2.jpg" srcset="https://cdn.example.org/zhao-2-small.jpg 480w, https://cdn.example.org/zhao-2-large.jpg 1200w">
+                <a class="gallery" href="/uploads/zhao-full.jpg"><img src="/uploads/zhao-thumb.jpg"></a>
+              </body>
+            </html>
+            """);
+
+        var preview = service.preview(request).block();
+
+        assertThat(preview).isNotNull();
+        assertThat(preview.getCaseData().getCoverImage())
+            .isEqualTo("https://example.org/uploads/zhao-main.jpg");
+        assertThat(preview.getCaseData().getGallery())
+            .contains("https://cdn.example.org/zhao-2-large.jpg",
+                "https://example.org/uploads/zhao-thumb.jpg",
+                "https://example.org/uploads/zhao-full.jpg")
+            .doesNotContain("https://example.org/logo.png",
+                "https://example.org/images/spacer.gif",
+                "https://cdn.example.org/zhao-2.jpg",
+                preview.getCaseData().getCoverImage());
+    }
+
+    @Test
+    void relativeMetadataCoverIsResolvedAndAiImportKeepsExtractedGallery() {
+        var aiService = mock(CaseImportAiService.class);
+        when(aiService.preview(any(), any(), any(), any())).thenAnswer(invocation -> {
+            CaseImportPreview preview = invocation.getArgument(3);
+            preview.setAiGenerated(true);
+            return Mono.just(preview);
+        });
+        var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
+            sourceUrl -> Mono.error(new AssertionError("不应请求网络")),
+            Optional.of(aiService));
+        var request = new CaseImportRequest();
+        request.setAi(true);
+        request.setSourceUrl("https://news.example.org/missing/chen-an");
+        request.setPageContent("""
+            <html>
+              <head><meta property="og:image" content="/media/cover.jpg"></head>
+              <body>
+                <p>姓名：陈安</p>
+                <img src="/media/detail.jpg">
+              </body>
+            </html>
+            """);
+
+        var preview = service.preview(request).block();
+
+        assertThat(preview).isNotNull();
+        assertThat(preview.isAiGenerated()).isTrue();
+        assertThat(preview.getCaseData().getCoverImage())
+            .isEqualTo("https://news.example.org/media/cover.jpg");
+        assertThat(preview.getCaseData().getGallery())
+            .containsExactly("https://news.example.org/media/detail.jpg");
+    }
+
+    @Test
     void aiRequestExplainsMissingAiFoundationInsteadOfFallingBackSilently() {
         var service = new CaseImportServiceImpl(new CaseImportParser(new ObjectMapper()),
             sourceUrl -> Mono.error(new AssertionError("不应请求网络")));

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN" xmlns:th="https://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>提交寻亲申请｜归航寻亲</title>
+  <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-public.css" />
+  <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-application.css" />
+</head>
+<body class="homeward-public-body">
+<main class="homeward-application-page">
+  <nav class="homeward-case-nav"><a href="/homeward">← 全部寻亲档案</a><a href="/homeward/receipts">查询线索进度</a></nav>
+  <header><p class="homeward-kicker">归航寻亲 · 人工审核</p><h1>提交寻亲申请</h1>
+    <p>先留下基本情况与联系方式，管理员会联系您核实。审核通过后仍需整理、核对资料再发布。</p></header>
+  <p class="homeward-form__message" data-application-availability role="status">正在确认申请服务…</p>
+  <form class="homeward-form" data-application-form hidden>
+    <h2>寻亲资料</h2>
+    <div class="homeward-form__row">
+      <label>寻亲人员姓名<input name="personName" maxlength="80" required /></label>
+      <label>失踪时间 <span>选填，可填写大致时间</span><input name="missingDate" maxlength="40" /></label>
+    </div>
+    <label>失踪地点<input name="missingLocation" maxlength="200" required placeholder="城市、区县或大致地点" /></label>
+    <label>详细情况 <span>20～4000 字</span><textarea name="description" minlength="20" maxlength="4000" required rows="6" placeholder="请描述失踪经过、体貌特征及已经采取的寻找措施。"></textarea></label>
+    <label>资料来源链接 <span>选填</span><input type="url" name="sourceUrl" maxlength="1000" placeholder="https://" /></label>
+    <h2>仅用于联系核实</h2>
+    <div class="homeward-form__row">
+      <label>申请人姓名<input name="applicantName" maxlength="80" autocomplete="name" required /></label>
+      <label>与寻亲人员的关系<input name="relationship" maxlength="80" required /></label>
+    </div>
+    <label>联系方式<input name="contact" maxlength="120" autocomplete="tel" required /></label>
+    <p>申请人姓名、关系和联系方式仅供管理员核实，不会自动写入公开档案。请勿提交身份证号、银行卡号等无关敏感信息。照片及其他证明材料可在联系核实时补充。</p>
+    <label class="homeward-application-consent"><input type="checkbox" name="consent" required />我确认有权提供以上资料，理解资料须经核实后发布，并同意管理员使用所留联系方式进行核实。</label>
+    <label class="homeward-honeypot" aria-hidden="true">网站<input name="website" tabindex="-1" autocomplete="off" /></label>
+    <p data-application-message class="homeward-form__message" role="status" aria-live="polite"></p>
+    <button class="homeward-button" type="submit">提交申请</button>
+  </form>
+  <noscript><p>请启用 JavaScript 后提交申请。</p></noscript>
+</main>
+<script defer src="/plugins/homeward/assets/static/homeward/homeward-common.js"></script>
+<script defer src="/plugins/homeward/assets/static/homeward/homeward-application.js"></script>
+</body>
+</html>

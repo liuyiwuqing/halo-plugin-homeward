@@ -24,6 +24,7 @@ export interface MissingPersonCaseVO {
   missingLocation?: string
   hometown?: string
   coverImage?: string
+  gallery?: string[]
   physicalFeatures?: string
   description?: string
   contactName?: string

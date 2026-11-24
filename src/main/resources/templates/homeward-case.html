@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN" xmlns:th="https://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title th:text="${caseData.title + '｜归航寻亲'}">寻亲档案｜归航寻亲</title>
+        <meta name="description" th:content="${caseData.physicalFeatures ?: caseData.title}" />
+        <link rel="canonical" th:href="${caseUrl}" />
+        <meta property="og:type" content="article" />
+        <meta property="og:title" th:content="${caseData.title}" />
+        <meta
+            property="og:description"
+            th:content="${caseData.physicalFeatures ?: caseData.title}"
+        />
+        <meta property="og:url" th:content="${caseUrl}" />
+        <meta
+            property="og:image"
+            th:if="${shareImageUrl != null and !#strings.isEmpty(shareImageUrl)}"
+            th:content="${shareImageUrl}"
+        />
+        <link
+            rel="stylesheet"
+            href="/plugins/homeward/assets/static/homeward/homeward-public.css"
+        />
+        <link
+            rel="stylesheet"
+            href="/plugins/homeward/assets/static/homeward/homeward-poster.css"
+        />
+      <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-receipt.css" />
+</head>
+    <body class="homeward-public-body">
+        <a class="homeward-skip-link" href="#homeward-case-content">跳到寻亲档案</a>
+        <main
+            class="homeward-page homeward-case-page"
+            id="homeward-case-content"
+            tabindex="-1"
+            th:attr="data-case-slug=${caseData.slug},data-case-title=${caseData.title},data-case-url=${caseUrl}"
+        >
+            <nav class="homeward-case-nav" aria-label="返回导航">
+                <a href="/homeward" data-homeward-back>← 全部寻亲档案</a><a href="/">博客首页</a>
+            </nav>
+            <header class="homeward-case-heading">
+                <p class="homeward-kicker">归航寻亲 · 公开档案</p>
+                <h1 th:text="${caseData.title}">寻亲档案</h1>
+                <p class="homeward-case-dates">
+                    <span th:if="${!#strings.isEmpty(publishedDateText)}"
+                        >发布于
+                        <time
+                            th:text="${publishedDateText}"
+                            th:datetime="${caseData.publishedAt}"
+                        ></time></span
+                    ><span th:if="${!#strings.isEmpty(updatedDateText)}"
+                        >更新于
+                        <time
+                            th:text="${updatedDateText}"
+                            th:datetime="${caseData.updatedAt}"
+                        ></time
+                    ></span>
+                </p>
+            </header>
+            <div class="homeward-case-layout">
+                <section class="homeward-case-photos" aria-label="寻亲照片">
+                    <a
+                        th:if="${!#strings.isEmpty(safeCoverImage)}"
+                        th:href="${safeCoverImage}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="在新窗口查看封面原图"
+                        ><img
+                            th:src="${safeCoverImage}"
+                            th:alt="${caseData.personName + '的寻亲照片'}"
+                    /></a>
+                    <p class="homeward-photo-empty" th:if="${#strings.isEmpty(safeCoverImage)}">
+                        暂无公开照片
+                    </p>
+                    <div class="homeward-case-gallery" th:if="${!#lists.isEmpty(safeGallery)}">
+                        <a
+                            th:each="photo : ${safeGallery}"
+                            th:href="${photo}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="在新窗口查看相册原图"
+                            ><img th:src="${photo}" alt="寻亲档案补充照片" loading="lazy"
+                        /></a>
+                    </div>
+                    <p>点击照片可查看原图，请勿裁剪或修改人物特征。</p>
+                </section>
+                <div>
+                    <section class="homeward-case-section" aria-labelledby="homeward-facts-title">
+                        <h2 id="homeward-facts-title">基本信息</h2>
+                        <dl class="homeward-case-facts">
+                            <div>
+                                <dt>姓名</dt>
+                                <dd th:text="${caseData.personName ?: '待补充'}"></dd>
+                            </div>
+                            <div>
+                                <dt>性别</dt>
+                                <dd th:text="${caseData.gender ?: '待补充'}"></dd>
+                            </div>
+                            <div>
+                                <dt>出生日期</dt>
+                                <dd th:text="${caseData.birthDate ?: '待补充'}"></dd>
+                            </div>
+                            <div>
+                                <dt>失踪日期</dt>
+                                <dd th:text="${caseData.missingDate ?: '待补充'}"></dd>
+                            </div>
+                            <div>
+                                <dt>失踪时年龄</dt>
+                                <dd
+                                    th:text="${caseData.missingAge != null ? caseData.missingAge + ' 岁' : '待补充'}"
+                                ></dd>
+                            </div>
+                            <div>
+                                <dt>当前年龄</dt>
+                                <dd
+                                    th:text="${caseData.currentAge != null ? caseData.currentAge + ' 岁' : '待补充'}"
+                                ></dd>
+                            </div>
+                            <div>
+                                <dt>失踪地点</dt>
+                                <dd th:text="${caseData.missingLocation ?: '待补充'}"></dd>
+                            </div>
+                            <div>
+                                <dt>籍贯</dt>
+                                <dd th:text="${caseData.hometown ?: '待补充'}"></dd>
+                            </div>
+                        </dl>
+                    </section>
+                    <section class="homeward-case-section">
+                        <h2>外貌与特征</h2>
+                        <p
+                            class="homeward-case-prose"
+                            th:text="${caseData.physicalFeatures ?: '暂未补充外貌特征。'}"
+                        ></p>
+                    </section>
+                    <section class="homeward-case-section">
+                        <h2>详细说明</h2>
+                        <p
+                            class="homeward-case-prose"
+                            th:text="${caseData.description ?: '暂未补充详细说明。'}"
+                        ></p>
+                    </section>
+                    <section class="homeward-case-section">
+                        <h2>信息来源</h2>
+                        <p th:text="${caseData.sourceName ?: '暂未注明来源'}"></p>
+                        <a
+                            class="homeward-link"
+                            th:if="${!#strings.isEmpty(safeSourceUrl)}"
+                            th:href="${safeSourceUrl}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >查看原始来源 ↗</a
+                        >
+                        <p th:if="${!#strings.isEmpty(caseData.contactName)}">
+                            公开联络人：<span th:text="${caseData.contactName}"></span>
+                        </p>
+                        <p class="homeward-source-note">
+                            请核对来源与更新时间。线索请通过本站表单提交，个人联系方式不会公开展示。
+                        </p>
+                    </section>
+                </div>
+            </div>
+            <section class="homeward-case-actions" aria-label="帮助寻亲">
+                <div data-homeward-clue-entry><p role="status">正在确认线索提交服务…</p></div>
+                <div class="homeward-share-actions">
+                    <button type="button" data-homeward-copy>复制档案链接</button
+                    ><button type="button" data-homeward-share hidden>分享这份档案</button>
+                    <button
+                        type="button"
+                        data-homeward-poster-generate
+                        aria-controls="homeward-poster-preview"
+                    >
+                        生成分享海报
+                    </button>
+                    <button
+                        type="button"
+                        data-homeward-qr-toggle
+                        aria-expanded="false"
+                        aria-controls="homeward-qrcode"
+                    >
+                        显示二维码
+                    </button>
+                </div>
+                <section
+                    id="homeward-qrcode"
+                    class="homeward-qrcode"
+                    data-homeward-qr
+                    hidden
+                    aria-labelledby="homeward-qrcode-title"
+                >
+                    <h2 id="homeward-qrcode-title">扫码查看这份档案</h2>
+                    <div data-homeward-qr-image></div>
+                    <p>二维码指向档案原始链接，请转发前核对来源与更新时间。</p>
+                    <button type="button" data-homeward-qr-close>关闭二维码</button>
+                </section>
+                <p data-homeward-share-message role="status" aria-live="polite"></p>
+                <p
+                    class="homeward-poster-message"
+                    data-homeward-poster-message
+                    role="status"
+                    aria-live="polite"
+                ></p>
+                <section
+                    id="homeward-poster-preview"
+                    class="homeward-poster-preview"
+                    data-homeward-poster-preview
+                    hidden
+                    aria-labelledby="homeward-poster-title"
+                >
+                    <h2 id="homeward-poster-title">分享海报预览</h2>
+                    <p>
+                        请核对公开信息后再分享。手机可长按图片保存；海报是生成时的快照，请扫码查看最新状态。
+                    </p>
+                    <img data-homeward-poster-image alt="寻亲分享海报预览" />
+                    <div class="homeward-poster-controls">
+                        <a data-homeward-poster-download>下载 PNG 海报</a
+                        ><button type="button" data-homeward-poster-close>关闭预览</button>
+                    </div>
+                </section>
+                <label class="homeward-manual-copy" data-homeward-manual-copy hidden
+                    >请长按或选中下方链接复制<input
+                        type="text"
+                        readonly
+                        th:value="${caseUrl}"
+                        aria-label="档案分享链接"
+                /></label>
+            </section>
+            <noscript
+                ><p>
+                    这份档案可直接浏览。请启用 JavaScript 以提交线索；分享时可复制浏览器地址。
+                </p></noscript
+            >
+        </main>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-common.js"></script>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-clue.js"></script>
+        <script defer src="/plugins/homeward/assets/static/homeward/vendor/qrcode.js"></script>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-detail.js"></script>
+        <script defer src="/plugins/homeward/assets/static/homeward/homeward-poster.js"></script>
+    </body>
+</html>

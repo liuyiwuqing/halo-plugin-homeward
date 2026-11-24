@@ -1,0 +1,55 @@
+.homeward-poster-preview {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--homeward-line);
+  background: var(--homeward-card);
+}
+.homeward-poster-preview h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--homeward-serif);
+  font-size: 1.3rem;
+}
+.homeward-poster-preview p,
+.homeward-poster-message {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--homeward-muted);
+}
+.homeward-poster-preview img {
+  display: block;
+  width: min(100%, 33.75rem);
+  height: auto;
+  margin: 1rem auto;
+  border: 1px solid var(--homeward-line);
+}
+.homeward-poster-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.homeward-poster-controls a,
+.homeward-poster-controls button {
+  padding: 0.8rem 1.2rem;
+  border: 1px solid var(--homeward-accent-dark);
+  background: var(--homeward-accent-dark);
+  color: #fff;
+  font: inherit;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+}
+.homeward-poster-controls button {
+  background: transparent;
+  border-color: var(--homeward-line);
+  color: var(--homeward-ink);
+}
+[data-homeward-poster-generate]:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+@media (max-width: 640px) {
+  .homeward-poster-preview {
+    padding: 1rem;
+  }
+}
