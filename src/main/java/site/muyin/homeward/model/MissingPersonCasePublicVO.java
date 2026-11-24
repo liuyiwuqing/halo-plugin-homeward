@@ -1,9 +1,10 @@
 package site.muyin.homeward.model;
 
-import java.time.Instant;
-import java.util.List;
 import lombok.Data;
 import site.muyin.homeward.scheme.MissingPersonCase;
+
+import java.time.Instant;
+import java.util.List;
 
 @Data
 public class MissingPersonCasePublicVO {
@@ -44,6 +45,8 @@ public class MissingPersonCasePublicVO {
 
     private Instant publishedAt;
 
+    private Instant updatedAt;
+
     public static MissingPersonCasePublicVO from(MissingPersonCase source) {
         var vo = new MissingPersonCasePublicVO();
         var spec = source.getSpec();
@@ -68,6 +71,7 @@ public class MissingPersonCasePublicVO {
         vo.setSourceName(spec.getSourceName());
         vo.setSourceUrl(spec.getSourceUrl());
         vo.setPublishedAt(spec.getPublishedAt());
+        vo.setUpdatedAt(spec.getUpdatedAt());
         return vo;
     }
 }

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { VButton, VEmpty } from '@halo-dev/components'
+import { VButton, VEmpty, VLoading, VPagination } from '@halo-dev/components'
 import RiCalendarEventLine from '~icons/ri/calendar-event-line'
 import RiMapPin2Line from '~icons/ri/map-pin-2-line'
 import RiSearchLine from '~icons/ri/search-line'
@@ -8,8 +7,13 @@ import type { CaseStatus, MissingPersonCaseVO } from '@/type'
 
 type CaseFilter = 'ALL' | CaseStatus
 
-const props = defineProps<{
+defineProps<{
   cases: MissingPersonCaseVO[]
+  page: number
+  size: number
+  total: number
+  loading?: boolean
+  error?: string
   keyword: string
   statusFilter: CaseFilter
   actionName?: string
@@ -19,6 +23,7 @@ const emit = defineEmits<{
   'update:keyword': [value: string]
   'update:statusFilter': [value: CaseFilter]
   search: []
+  paginate: [value: { page: number; size: number }]
   create: []
   edit: [value: MissingPersonCaseVO]
   action: [value: MissingPersonCaseVO, action: 'publish' | 'archive' | 'mark-found']
@@ -40,17 +45,6 @@ const statusLabels: Record<CaseStatus, string> = {
   ARCHIVED: '已归档',
 }
 
-const filteredCases = computed(() =>
-  props.statusFilter === 'ALL'
-    ? props.cases
-    : props.cases.filter((item) => (item.status || 'DRAFT') === props.statusFilter),
-)
-
-function filterCount(filter: CaseFilter) {
-  if (filter === 'ALL') return props.cases.length
-  return props.cases.filter((item) => (item.status || 'DRAFT') === filter).length
-}
-
 function fallbackName(item: MissingPersonCaseVO) {
   return (item.personName || item.title || '寻').slice(0, 1)
 }
@@ -61,14 +55,16 @@ function updateKeyword(event: Event) {
 </script>
 
 <template>
-  <section class="homeward-content-panel" aria-labelledby="case-list-heading">
+  <section class="homeward-content-panel" aria-labelledby="case-list-heading" :aria-busy="loading">
     <header class="homeward-panel-header">
       <div>
         <span class="homeward-eyebrow">案例档案</span>
         <h2 id="case-list-heading">寻亲案例</h2>
-        <p>共 {{ cases.length }} 份档案，发布前请确认隐私授权和信息来源。</p>
+        <p>发布前请确认隐私授权和信息来源。</p>
       </div>
-      <span class="homeward-panel-count">{{ filteredCases.length }} 条当前结果</span>
+      <span v-if="!error" class="homeward-panel-count">{{
+        loading ? '正在加载…' : `共 ${total} 条匹配结果`
+      }}</span>
     </header>
 
     <div class="homeward-list-toolbar">
@@ -88,18 +84,23 @@ function updateKeyword(event: Event) {
         <button
           v-for="filter in filters"
           :key="filter.value"
+          :data-testid="`case-filter-${filter.value}`"
           type="button"
           :class="{ 'is-active': statusFilter === filter.value }"
+          :aria-pressed="statusFilter === filter.value"
           @click="emit('update:statusFilter', filter.value)"
         >
           <span>{{ filter.label }}</span>
-          <small>{{ filterCount(filter.value) }}</small>
         </button>
       </div>
     </div>
 
-    <div v-if="filteredCases.length" class="homeward-case-list">
-      <article v-for="item in filteredCases" :key="item.name" class="homeward-case-row">
+    <div v-if="loading" class="homeward-loading-state" role="status">
+      <VLoading />
+      <p>正在加载案例…</p>
+    </div>
+    <div v-else-if="cases.length" class="homeward-case-list">
+      <article v-for="item in cases" :key="item.name" class="homeward-case-row">
         <div class="homeward-case-cover">
           <img
             v-if="item.coverImage"
@@ -167,13 +168,28 @@ function updateKeyword(event: Event) {
       </article>
     </div>
     <VEmpty
-      v-else
-      :title="statusFilter === 'ALL' ? '暂无寻亲案例' : '该状态下没有案例'"
+      v-else-if="!error"
+      :title="
+        keyword
+          ? '没有找到匹配的案例'
+          : statusFilter === 'ALL'
+            ? '暂无寻亲案例'
+            : '该状态下没有案例'
+      "
       description="录入完整资料后，可以发布到公益展示页面。"
     >
       <template #actions>
         <VButton type="primary" @click="emit('create')">录入第一份案例</VButton>
       </template>
     </VEmpty>
+    <VPagination
+      v-if="!error"
+      data-testid="case-pagination"
+      :page="page"
+      :size="size"
+      :total="total"
+      :size-options="[10, 30, 50]"
+      @change="emit('paginate', $event)"
+    />
   </section>
 </template>

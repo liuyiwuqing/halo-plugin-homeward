@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { VButton, VModal } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
 import RiCheckboxCircleLine from '~icons/ri/checkbox-circle-line'
@@ -26,6 +26,27 @@ const form = reactive<{ status: ClueStatus; processNote: string }>({
   status: 'PENDING',
   processNote: '',
 })
+const validationError = ref('')
+const displayedError = computed(() => validationError.value || props.error)
+const history = computed(() => {
+  if (props.clue.processingHistory?.length) return [...props.clue.processingHistory].reverse()
+  if (
+    props.clue.processNote ||
+    props.clue.handler ||
+    (props.clue.status && props.clue.status !== 'PENDING')
+  ) {
+    return [
+      {
+        status: props.clue.status,
+        handler: props.clue.handler,
+        processNote: props.clue.processNote,
+        processedAt: props.clue.updatedAt,
+        legacy: true,
+      },
+    ]
+  }
+  return []
+})
 
 const statusOptions: Array<{ value: ClueStatus; label: string; hint: string }> = [
   { value: 'PENDING', label: '待处理', hint: '尚未开始核实' },
@@ -42,13 +63,28 @@ watch(
   () => [props.visible, props.clue] as const,
   () => {
     form.status = props.clue.status || 'PENDING'
-    form.processNote = props.clue.processNote || ''
+    form.processNote = ''
+    validationError.value = ''
   },
   { immediate: true },
 )
 
 function submit() {
+  if (props.saving) return
+  if (form.processNote.length > 2000) {
+    validationError.value = '处理备注不能超过 2000 个字符'
+    return
+  }
+  validationError.value = ''
   emit('save', { status: form.status, processNote: form.processNote.trim() || undefined })
+}
+
+function statusLabel(status?: ClueStatus) {
+  return statusOptions.find((item) => item.value === status)?.label || '未知状态'
+}
+
+function close() {
+  if (!props.saving) emit('close')
 }
 
 function formatSubmittedAt(value?: string) {
@@ -64,7 +100,7 @@ function formatSubmittedAt(value?: string) {
     :centered="false"
     :layer-closable="false"
     :body-class="['homeward-clue-modal-body']"
-    @close="emit('close')"
+    @close="close"
   >
     <section
       class="homeward-clue-detail"
@@ -130,6 +166,23 @@ function formatSubmittedAt(value?: string) {
         <p class="homeward-clue-content-copy">{{ clue.content || '访客未填写具体内容' }}</p>
       </section>
 
+      <section v-if="history.length" class="homeward-clue-history" aria-label="处理记录">
+        <h3>处理记录</h3>
+        <ol>
+          <li v-for="(record, index) in history" :key="index">
+            <div>
+              <strong>{{ statusLabel(record.status) }}</strong>
+              <span>{{ record.handler || '未记录处理人' }}</span>
+              <time :datetime="record.processedAt">{{
+                formatSubmittedAt(record.processedAt)
+              }}</time>
+              <small v-if="record.legacy">旧版保留记录</small>
+            </div>
+            <p>{{ record.processNote || '未填写备注' }}</p>
+          </li>
+        </ol>
+      </section>
+
       <section class="homeward-clue-workflow" aria-labelledby="homeward-clue-workflow-title">
         <header class="homeward-clue-section-heading">
           <span class="homeward-clue-section-icon" aria-hidden="true"
@@ -148,6 +201,7 @@ function formatSubmittedAt(value?: string) {
             type="button"
             :class="{ 'is-active': form.status === option.value }"
             :aria-pressed="form.status === option.value"
+            :disabled="saving"
             @click="form.status = option.value"
           >
             <span>{{ option.label }}</span>
@@ -158,18 +212,20 @@ function formatSubmittedAt(value?: string) {
           v-model="form.processNote"
           type="textarea"
           name="processNote"
-          label="处理备注"
-          help="记录核实过程和后续动作，方便团队继续跟进"
+          label="本次处理备注"
+          help="每次保存会新增一条记录，处理人由当前登录账号自动记录；最多 2000 个字符"
+          :maxlength="2000"
+          :disabled="saving"
           outer-class="homeward-form-field homeward-textarea-field homeward-clue-note-field"
           :rows="4"
           :auto-height="true"
         />
       </section>
 
-      <p v-if="error" class="homeward-form-error" role="alert">{{ error }}</p>
+      <p v-if="displayedError" class="homeward-form-error" role="alert">{{ displayedError }}</p>
     </section>
     <template #footer>
-      <VButton type="secondary" :disabled="saving" @click="emit('close')">取消</VButton>
+      <VButton type="secondary" :disabled="saving" @click="close">取消</VButton>
       <VButton
         data-testid="save-clue"
         type="primary"
@@ -182,3 +238,40 @@ function formatSubmittedAt(value?: string) {
     </template>
   </VModal>
 </template>
+
+<style scoped>
+.homeward-clue-history {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 18px;
+}
+.homeward-clue-history h3 {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.homeward-clue-history ol {
+  display: grid;
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.homeward-clue-history li {
+  border-left: 2px solid #cbd5e1;
+  padding-left: 12px;
+}
+.homeward-clue-history li > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+.homeward-clue-history strong {
+  color: #334155;
+}
+.homeward-clue-history p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+</style>

@@ -19,6 +19,14 @@ const emit = defineEmits<{
 const title = computed(() => (props.caseData?.name ? '编辑寻亲案例' : '新增寻亲案例'))
 const validationError = ref('')
 const displayedError = computed(() => props.error || validationError.value)
+const slugLocked = computed(() =>
+  Boolean(
+    props.caseData?.publishedAt ||
+    props.caseData?.foundAt ||
+    props.caseData?.status === 'PUBLISHED' ||
+    props.caseData?.status === 'FOUND',
+  ),
+)
 const form = reactive<MissingPersonCaseVO>({
   slug: '',
   personName: '',
@@ -223,7 +231,12 @@ function submit() {
                 type="text"
                 name="slug"
                 label="Slug"
-                help="留空时由系统自动生成"
+                :disabled="slugLocked"
+                :help="
+                  slugLocked
+                    ? '已公开或结案的案例保留原链接，不能修改访问标识'
+                    : '留空时由系统自动生成'
+                "
               />
               <FormKit
                 v-model="form.status"

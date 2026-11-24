@@ -6,12 +6,15 @@ import site.muyin.homeward.enums.CaseStatus;
 import site.muyin.homeward.model.MissingPersonCasePublicVO;
 import site.muyin.homeward.model.MissingPersonCaseVO;
 import site.muyin.homeward.model.WidgetResponse;
+import site.muyin.homeward.query.MissingPersonCasePublicQuery;
 import site.muyin.homeward.query.MissingPersonCaseQuery;
 import site.muyin.homeward.scheme.MissingPersonCase;
 
 public interface MissingPersonCaseService {
 
     Mono<ListResult<MissingPersonCaseVO>> listForConsole(MissingPersonCaseQuery query);
+
+    Mono<ListResult<MissingPersonCasePublicVO>> listForPublic(MissingPersonCasePublicQuery query);
 
     Mono<MissingPersonCaseVO> getForConsole(String name);
 

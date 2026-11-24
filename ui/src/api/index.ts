@@ -1,8 +1,8 @@
 import { axiosInstance } from '@halo-dev/api-client'
 import type {
-  CaseImportPreview,
   CaseImportBatchPreview,
   CaseImportBatchRequest,
+  CaseImportPreview,
   CaseImportRequest,
   ClueReportVO,
   ClueStatus,
@@ -91,7 +91,7 @@ export async function listClues(params: Record<string, unknown>) {
 
 export async function updateClueStatus(
   name: string,
-  payload: { status: ClueStatus; handler?: string; processNote?: string },
+  payload: { status: ClueStatus; processNote?: string },
 ) {
   const { data } = await axiosInstance.post<ClueReportVO>(
     `${CONSOLE_BASE}/clues/${name}/status`,

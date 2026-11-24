@@ -3,6 +3,7 @@ import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ConsoleDashboard from './ConsoleDashboard.vue'
+import CaseEditorModal from '@/components/CaseEditorModal.vue'
 
 vi.mock('@halo-dev/components', () => {
   const passthrough = (tag: string) =>
@@ -17,6 +18,39 @@ vi.mock('@halo-dev/components', () => {
     VButton: passthrough('button'),
     VEmpty: passthrough('div'),
     VLoading: passthrough('div'),
+    VPagination: defineComponent({
+      props: { page: { default: 1 }, size: { default: 30 }, total: { default: 0 } },
+      emits: ['change'],
+      setup(props, { emit }) {
+        return () =>
+          h('div', [
+            h('span', `共 ${props.total} 项数据`),
+            h(
+              'button',
+              {
+                class: 'pagination__btn--next',
+                disabled: props.page >= Math.ceil(props.total / props.size),
+                onClick: () => emit('change', { page: props.page + 1, size: props.size }),
+              },
+              '下一页',
+            ),
+            h('select', { class: 'pagination__select', value: props.page }),
+            h(
+              'select',
+              {
+                class: 'pagination__select',
+                value: props.size,
+                onChange: (event: Event) =>
+                  emit('change', {
+                    page: 1,
+                    size: Number((event.target as HTMLSelectElement).value),
+                  }),
+              },
+              [10, 30, 50].map((size) => h('option', { value: size }, size)),
+            ),
+          ])
+      },
+    }),
     VModal: defineComponent({
       inheritAttrs: false,
       props: ['title', 'visible'],
@@ -95,10 +129,49 @@ const api = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api', () => api)
+vi.mock('@/api/applications', () => ({ listApplications: vi.fn(), reviewApplication: vi.fn() }))
+
+describe('CaseEditorModal 分享链接保护', () => {
+  it.each(['PUBLISHED', 'FOUND'] as const)(
+    '%s 旧案例即使没有时间戳，也保留 slug 并允许修改其他资料',
+    async (status) => {
+      const wrapper = mount(CaseEditorModal, {
+        props: {
+          visible: true,
+          caseData: { name: 'case-a', slug: 'stable-link', personName: '测试人员', status },
+        },
+        global: { components: { FormKit: FormKitStub } },
+      })
+      expect(wrapper.get('[name="slug"]').element).toHaveProperty('disabled', true)
+      await wrapper.get('[name="personName"]').setValue('已核对姓名')
+      await wrapper.get('form').trigger('submit')
+      expect(wrapper.emitted('save')?.[0]?.[0]).toEqual(
+        expect.objectContaining({ slug: 'stable-link', personName: '已核对姓名', status }),
+      )
+    },
+  )
+
+  it('未公开草稿仍可调整 slug', async () => {
+    const wrapper = mount(CaseEditorModal, {
+      props: {
+        visible: true,
+        caseData: { name: 'draft-a', slug: 'draft-link', personName: '测试人员', status: 'DRAFT' },
+      },
+      global: { components: { FormKit: FormKitStub } },
+    })
+    expect(wrapper.get('[name="slug"]').element).toHaveProperty('disabled', false)
+    await wrapper.get('[name="slug"]').setValue('updated-draft-link')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('save')?.[0]?.[0]).toEqual(
+      expect.objectContaining({ slug: 'updated-draft-link' }),
+    )
+  })
+})
 
 describe('ConsoleDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.values(api).forEach((mock) => mock.mockReset())
     api.getDashboardStats.mockResolvedValue({
       totalCases: 0,
       publishedCases: 0,
@@ -310,6 +383,50 @@ describe('ConsoleDashboard', () => {
     })
   })
 
+  it('关闭批次后保留解析结果和已保存标记，只有确认开始新批次才清空', async () => {
+    api.previewCaseImportBatch.mockResolvedValue({
+      items: [0, 1].map((index) => ({
+        index,
+        preview: {
+          caseData: { personName: `人员${index}`, title: `寻找人员${index}`, status: 'DRAFT' },
+          extractedFieldCount: 2,
+          warnings: [],
+        },
+      })),
+      succeeded: 2,
+      failed: 0,
+    })
+    api.saveCase.mockResolvedValue({})
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="batch-import-case"]').trigger('click')
+    await wrapper.get('[data-testid="batch-import-source-text"]').setValue('寻亲资料')
+    await wrapper.get('[data-testid="preview-batch-import"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="review-batch-import-0"]').trigger('click')
+    await wrapper.get('[data-testid="save-case"]').trigger('click')
+    await flushPromises()
+    const batch = () => wrapper.get('[data-modal-title="批量 AI 导入寻亲资料"]')
+    expect(batch().text()).toContain('已保存')
+    await batch()
+      .findAll('button')
+      .find((button) => button.text() === '关闭')!
+      .trigger('click')
+    await wrapper.get('[data-testid="batch-import-case"]').trigger('click')
+    expect(batch().text()).toContain('已保存')
+    expect(wrapper.find('[data-testid="review-batch-import-0"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="review-batch-import-1"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="new-batch-import"]').trigger('click')
+    expect(wrapper.get('[role="alertdialog"]').text()).toContain('仍有未保存')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    expect(wrapper.find('[data-testid="review-batch-import-1"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="batch-import-source-text"]').element).toHaveProperty(
+      'value',
+      '',
+    )
+    expect(api.previewCaseImportBatch).toHaveBeenCalledTimes(1)
+  })
+
   it('用户点击概览指标后进入对应工作区', async () => {
     const wrapper = mount(ConsoleDashboard, {
       global: { components: { FormKit: FormKitStub } },
@@ -320,6 +437,242 @@ describe('ConsoleDashboard', () => {
 
     expect(wrapper.get('[data-testid="tab-cases"]').attributes('aria-current')).toBe('page')
     expect(wrapper.get('[aria-labelledby="case-list-heading"]').text()).toContain('寻亲案例')
+  })
+
+  it.each([
+    ['cases', 'listCases', 'case', 'DRAFT'],
+    ['clues', 'listClues', 'clue', 'PENDING'],
+  ] as const)(
+    '%s 使用服务端总数分页，状态筛选和搜索均从第一页请求',
+    async (tab, apiName, kind, status) => {
+      api[apiName].mockResolvedValue({ page: 1, size: 30, total: 65, items: [] })
+      const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+      await flushPromises()
+      await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+
+      expect(wrapper.get(`[data-testid="${kind}-pagination"]`).text()).toContain('共 65 项数据')
+      await wrapper.get('.pagination__btn--next').trigger('click')
+      await flushPromises()
+      expect(api[apiName]).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, size: 30 }))
+
+      await wrapper.get(`[data-testid="${kind}-filter-${status}"]`).trigger('click')
+      await flushPromises()
+      expect(api[apiName]).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, status }))
+
+      await wrapper.get('.pagination__btn--next').trigger('click')
+      await flushPromises()
+      await wrapper.get('input[type="search"]').setValue('车站')
+      await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+      await flushPromises()
+      expect(api[apiName]).toHaveBeenLastCalledWith({ page: 1, size: 30, keyword: '车站', status })
+
+      await wrapper.findAll('.pagination__select')[1]!.setValue('10')
+      await flushPromises()
+      expect(api[apiName]).toHaveBeenLastCalledWith({ page: 1, size: 10, keyword: '车站', status })
+    },
+  )
+
+  it.each([
+    ['metric-cases-blue', 'listCases', 'case', 'PUBLISHED'],
+    ['metric-cases-green', 'listCases', 'case', 'FOUND'],
+    ['metric-clues-amber', 'listClues', 'clue', 'PENDING'],
+  ] as const)('%s 进入对应状态的完整队列', async (metric, apiName, kind, status) => {
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get(`[data-testid="${metric}"]`).trigger('click')
+    await flushPromises()
+    expect(api[apiName]).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, status }))
+    expect(wrapper.get(`[data-testid="${kind}-filter-${status}"]`).classes()).toContain('is-active')
+  })
+
+  it.each([
+    ['cases', 'listCases', 'case', 'personName'],
+    ['clues', 'listClues', 'clue', 'caseTitle'],
+  ] as const)(
+    '%s 快速连续搜索时只展示最新响应，忽略过期错误',
+    async (tab, apiName, kind, titleKey) => {
+      const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+      await flushPromises()
+      await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+      let rejectOld!: (error: Error) => void
+      api[apiName].mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOld = reject
+          }),
+      )
+      await wrapper.get('input[type="search"]').setValue('旧查询')
+      await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+      api[apiName].mockResolvedValueOnce({
+        page: 1,
+        size: 30,
+        total: 1,
+        items: [{ name: 'new', [titleKey]: '最新结果' }],
+      })
+      await wrapper.get('input[type="search"]').setValue('新查询')
+      await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+      await flushPromises()
+      rejectOld(new Error('旧查询失败'))
+      await flushPromises()
+      expect(wrapper.text()).toContain('最新结果')
+      expect(wrapper.text()).not.toContain('旧查询失败')
+    },
+  )
+
+  it.each([
+    ['cases', 'listCases', 'case', 'deleteCase', 'personName'],
+    ['clues', 'listClues', 'clue', 'deleteClue', 'caseTitle'],
+  ] as const)(
+    '%s 删除末页唯一一条后返回有效上一页',
+    async (tab, apiName, kind, deleteApi, titleKey) => {
+      api[apiName]
+        .mockResolvedValueOnce({
+          page: 1,
+          size: 30,
+          total: 31,
+          items: [{ name: 'first', [titleKey]: '第一页' }],
+        })
+        .mockResolvedValueOnce({
+          page: 2,
+          size: 30,
+          total: 31,
+          items: [{ name: 'last', [titleKey]: '末页唯一记录' }],
+        })
+        .mockResolvedValue({
+          page: 1,
+          size: 30,
+          total: 30,
+          items: [{ name: 'first', [titleKey]: '第一页' }],
+        })
+      api[deleteApi].mockResolvedValue({})
+      const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+      await flushPromises()
+      await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+      await wrapper.get('.pagination__btn--next').trigger('click')
+      await flushPromises()
+      await wrapper.get(`[data-testid="delete-${kind}-last"]`).trigger('click')
+      await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+      await flushPromises()
+      expect(api[apiName]).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 }))
+      expect(wrapper.text()).toContain('第一页')
+      expect(wrapper.get(`[data-testid="${kind}-pagination"]`).text()).toContain('共 30 项数据')
+    },
+  )
+
+  it.each([
+    ['cases', 'listCases', 'case', 'personName'],
+    ['clues', 'listClues', 'clue', 'caseTitle'],
+  ] as const)(
+    '%s 先发出的搜索晚返回时不会覆盖当前结果与总数',
+    async (tab, apiName, kind, titleKey) => {
+      const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+      await flushPromises()
+      await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+      let resolveOld!: (value: unknown) => void
+      api[apiName].mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve
+          }),
+      )
+      await wrapper.get('input[type="search"]').setValue('旧查询')
+      await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+      api[apiName].mockResolvedValueOnce({
+        page: 1,
+        size: 30,
+        total: 1,
+        items: [{ name: 'new', [titleKey]: '当前记录' }],
+      })
+      await wrapper.get('input[type="search"]').setValue('新查询')
+      await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+      await flushPromises()
+      resolveOld({ page: 1, size: 30, total: 65, items: [{ name: 'old', [titleKey]: '过期记录' }] })
+      await flushPromises()
+      expect(wrapper.text()).toContain('当前记录')
+      expect(wrapper.text()).not.toContain('过期记录')
+      expect(wrapper.get(`[data-testid="${kind}-pagination"]`).text()).toContain('共 1 项数据')
+    },
+  )
+
+  it.each([
+    ['cases', 'listCases', 'case', 'deleteCase', 'personName'],
+    ['clues', 'listClues', 'clue', 'deleteClue', 'caseTitle'],
+  ] as const)(
+    '%s 删除后即使统计仍在加载，也不会展示索引返回的旧记录',
+    async (tab, apiName, kind, deleteApi, titleKey) => {
+      api[apiName].mockResolvedValue({
+        page: 1,
+        size: 30,
+        total: 1,
+        items: [{ name: 'deleted', [titleKey]: '已删除记录' }],
+      })
+      api[deleteApi].mockResolvedValue({})
+      const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+      await flushPromises()
+      let finishStats!: (value: unknown) => void
+      api.getDashboardStats.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishStats = resolve
+          }),
+      )
+      await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+      await wrapper.get(`[data-testid="delete-${kind}-deleted"]`).trigger('click')
+      await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find(`[data-testid="delete-${kind}-deleted"]`).exists()).toBe(false)
+      expect(wrapper.get(`[data-testid="${kind}-pagination"]`).text()).toContain('共 0 项数据')
+      finishStats({ totalCases: 0, publishedCases: 0, foundCases: 0, pendingClues: 0 })
+      await flushPromises()
+    },
+  )
+
+  it.each([
+    ['cases', 'listCases', 'case'],
+    ['clues', 'listClues', 'clue'],
+  ] as const)('%s 当前查询失败时不展示上一次查询的总数与分页', async (tab, apiName, kind) => {
+    api[apiName].mockResolvedValueOnce({ page: 1, size: 30, total: 65, items: [] })
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get(`[data-testid="tab-${tab}"]`).trigger('click')
+    api[apiName].mockRejectedValueOnce(new Error('当前查询失败'))
+    await wrapper.get('input[type="search"]').setValue('新查询')
+    await wrapper.get(`[data-testid="${kind}-search-submit"]`).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('当前查询失败')
+    expect(wrapper.find(`[data-testid="${kind}-pagination"]`).exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('共 65')
+  })
+
+  it('概览全部案例清除上次关键词与状态，待处理快捷入口直达待处理队列', async () => {
+    api.getDashboardStats.mockResolvedValue({
+      totalCases: 65,
+      publishedCases: 30,
+      foundCases: 1,
+      pendingClues: 3,
+    })
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="metric-cases-blue"]').trigger('click')
+    await wrapper.get('input[type="search"]').setValue('车站')
+    await wrapper.get('[data-testid="case-search-submit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-overview"]').trigger('click')
+    await wrapper.get('[data-testid="metric-cases-ink"]').trigger('click')
+    await flushPromises()
+    expect(api.listCases).toHaveBeenLastCalledWith({ page: 1, size: 30, keyword: undefined })
+    expect(wrapper.get('[data-testid="case-filter-ALL"]').classes()).toContain('is-active')
+    await wrapper.get('[data-testid="tab-overview"]').trigger('click')
+    await wrapper.get('.homeward-focus-card .homeward-text-action').trigger('click')
+    await flushPromises()
+    expect(api.listClues).toHaveBeenLastCalledWith({
+      page: 1,
+      size: 30,
+      keyword: undefined,
+      status: 'PENDING',
+    })
   })
 
   it('用户输入案例关键字并点击搜索后按关键字请求案例', async () => {
@@ -554,7 +907,6 @@ describe('ConsoleDashboard', () => {
 
     expect(api.updateClueStatus).toHaveBeenCalledWith('clue-001', {
       status: 'RESOLVED',
-      handler: 'admin',
       processNote: '已电话核实，信息可信',
     })
     expect(wrapper.find('[data-testid="save-clue"]').exists()).toBe(false)
@@ -585,6 +937,66 @@ describe('ConsoleDashboard', () => {
     await wrapper.get('[data-testid="open-clue-clue-001"]').trigger('click')
 
     expect(wrapper.get('textarea[name="processNote"]').attributes('rows')).toBe('4')
+  })
+
+  it('展示完整处理历史，本次备注为空且超长备注不会提交', async () => {
+    api.listClues.mockResolvedValue({
+      page: 1,
+      size: 30,
+      total: 1,
+      items: [
+        {
+          name: 'history-clue',
+          caseTitle: '寻找家人',
+          status: 'CONTACTED',
+          processNote: '最近一次备注',
+          handler: 'staff-b',
+          processingHistory: [
+            { status: 'PENDING', handler: 'staff-a', processNote: '旧版备注', legacy: true },
+            { status: 'CONTACTED', handler: 'staff-b', processNote: '最近一次备注' },
+          ],
+        },
+      ],
+    })
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-clues"]').trigger('click')
+    await wrapper.get('[data-testid="open-clue-history-clue"]').trigger('click')
+    const records = wrapper.get('[aria-label="处理记录"]')
+    expect(records.text()).toContain('staff-a')
+    expect(records.text()).toContain('staff-b')
+    expect(records.text()).toContain('旧版保留记录')
+    expect(records.findAll('li')[0]!.text()).toContain('最近一次备注')
+    const note = wrapper.get('textarea[name="processNote"]')
+    expect(note.element).toHaveProperty('value', '')
+    expect(note.attributes('maxlength')).toBe('2000')
+    await note.setValue('字'.repeat(2001))
+    await wrapper.get('[data-testid="save-clue"]').trigger('click')
+    expect(api.updateClueStatus).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain('不能超过 2000')
+  })
+
+  it('旧线索缺少历史数组仍展示最后记录', async () => {
+    api.listClues.mockResolvedValue({
+      page: 1,
+      size: 30,
+      total: 1,
+      items: [
+        {
+          name: 'old-clue',
+          status: 'CONTACTED',
+          processNote: '曾经电话核实',
+          handler: 'previous-user',
+        },
+      ],
+    })
+    const wrapper = mount(ConsoleDashboard, { global: { components: { FormKit: FormKitStub } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="tab-clues"]').trigger('click')
+    await wrapper.get('[data-testid="open-clue-old-clue"]').trigger('click')
+    expect(wrapper.get('[aria-label="处理记录"]').text()).toContain('旧版保留记录')
+    expect(wrapper.get('[aria-label="处理记录"]').text()).toContain('曾经电话核实')
+    expect(wrapper.get('textarea[name="processNote"]').element).toHaveProperty('value', '')
   })
 
   it('打开线索详情时以可读格式显示提交时间', async () => {

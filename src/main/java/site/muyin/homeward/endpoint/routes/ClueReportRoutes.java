@@ -4,11 +4,15 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.fn.builders.schema.Builder;
 import org.springdoc.webflux.core.fn.SpringdocRouteBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ListResult;
 import site.muyin.homeward.model.ClueReportVO;
@@ -62,8 +66,11 @@ public class ClueReportRoutes {
 
     public Mono<ServerResponse> submitForPublic(ServerRequest request) {
         return request.bodyToMono(ClueSubmitRequest.class)
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "请求内容不能为空")))
             .flatMap(body -> service.submit(request.pathVariable("slug"), body, request))
-            .flatMap(response -> ServerResponse.ok().bodyValue(response));
+            .flatMap(response -> ServerResponse.ok().header("Cache-Control", "no-store")
+                .bodyValue(response));
     }
 
     private Mono<ServerResponse> listForConsole(ServerRequest request) {
@@ -77,8 +84,16 @@ public class ClueReportRoutes {
     }
 
     private Mono<ServerResponse> updateStatusForConsole(ServerRequest request) {
-        return request.bodyToMono(ClueStatusUpdateRequest.class)
-            .flatMap(body -> service.updateStatus(request.pathVariable("name"), body))
+        return request.principal()
+            .filter(principal -> !(principal instanceof AnonymousAuthenticationToken)
+                && (!(principal instanceof Authentication auth) || auth.isAuthenticated()))
+            .filter(principal -> principal.getName() != null && !principal.getName().isBlank())
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录")))
+            .flatMap(principal -> request.bodyToMono(ClueStatusUpdateRequest.class)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "请求内容不能为空")))
+                .flatMap(body -> service.updateStatus(request.pathVariable("name"), body,
+                    principal.getName())))
             .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 

@@ -1,6 +1,5 @@
 package site.muyin.homeward.service.impl;
 
-import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -14,7 +13,6 @@ import run.halo.app.extension.Metadata;
 import run.halo.app.extension.MetadataUtil;
 import run.halo.app.extension.PageRequestImpl;
 import run.halo.app.extension.ReactiveExtensionClient;
-import site.muyin.homeward.enums.CaseStatus;
 import site.muyin.homeward.enums.ClueStatus;
 import site.muyin.homeward.model.ClueReportVO;
 import site.muyin.homeward.model.ClueStatusUpdateRequest;
@@ -22,14 +20,18 @@ import site.muyin.homeward.model.ClueSubmitRequest;
 import site.muyin.homeward.model.ClueSubmitResult;
 import site.muyin.homeward.notify.ClueSubmittedNotifyService;
 import site.muyin.homeward.query.ClueReportQuery;
+import site.muyin.homeward.query.MissingPersonCasePublicQuery;
 import site.muyin.homeward.scheme.ClueReport;
 import site.muyin.homeward.scheme.MissingPersonCase;
 import site.muyin.homeward.service.ClueProtectionService;
 import site.muyin.homeward.service.ClueReportService;
-import site.muyin.homeward.setting.HomewardProtectionSetting;
+import site.muyin.homeward.setting.HomewardPublicSettings;
 import site.muyin.homeward.support.HomewardNames;
 import site.muyin.homeward.support.HomewardRequestSupport;
-import run.halo.app.plugin.ReactiveSettingFetcher;
+import site.muyin.homeward.support.ReceiptSupport;
+
+import java.time.Instant;
+import java.util.ArrayList;
 
 import static run.halo.app.extension.index.query.Queries.equal;
 
@@ -39,7 +41,7 @@ public class ClueReportServiceImpl implements ClueReportService {
 
     private final ReactiveExtensionClient client;
 
-    private final ReactiveSettingFetcher settingFetcher;
+    private final HomewardPublicSettings publicSettings;
 
     private final ClueProtectionService protectionService;
 
@@ -60,18 +62,49 @@ public class ClueReportServiceImpl implements ClueReportService {
     }
 
     @Override
-    public Mono<ClueReportVO> updateStatus(String name, ClueStatusUpdateRequest request) {
+    public Mono<ClueReportVO> updateStatus(String name, ClueStatusUpdateRequest request,
+                                          String authenticatedHandler) {
         if (request == null || request.getStatus() == null) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "线索状态不能为空"));
+        }
+        if (authenticatedHandler == null || authenticatedHandler.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录"));
+        }
+        if (request.getProcessNote() != null && request.getProcessNote().length() > 2000) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "处理备注不能超过 2000 个字符"));
         }
         return client.fetch(ClueReport.class, name)
             .switchIfEmpty(Mono.error(notFound("线索不存在")))
             .map(item -> {
                 var spec = item.getSpec();
+                Instant now = Instant.now();
+                var history = new ArrayList<>(spec.getProcessingHistory() == null
+                    ? java.util.List.<ClueReport.ProcessingRecord>of() : spec.getProcessingHistory());
+                // 旧版本只保留最近一次处理，不捏造更早历史；首次追加时保留这份旧记录。
+                if (history.isEmpty() && (trimToNull(spec.getProcessNote()) != null
+                    || trimToNull(spec.getHandler()) != null
+                    || (spec.getStatus() != null && spec.getStatus() != ClueStatus.PENDING))) {
+                    var legacy = new ClueReport.ProcessingRecord();
+                    legacy.setStatus(spec.getStatus());
+                    legacy.setHandler(spec.getHandler());
+                    legacy.setProcessNote(spec.getProcessNote());
+                    legacy.setProcessedAt(spec.getUpdatedAt());
+                    legacy.setLegacy(true);
+                    history.add(legacy);
+                }
+                var record = new ClueReport.ProcessingRecord();
+                record.setPreviousStatus(spec.getStatus());
+                record.setStatus(request.getStatus());
+                record.setHandler(authenticatedHandler);
+                record.setProcessNote(trimToNull(request.getProcessNote()));
+                record.setProcessedAt(now);
+                history.add(record);
+                spec.setProcessingHistory(history);
                 spec.setStatus(request.getStatus());
-                spec.setHandler(request.getHandler());
-                spec.setProcessNote(request.getProcessNote());
-                spec.setUpdatedAt(Instant.now());
+                spec.setHandler(authenticatedHandler);
+                spec.setProcessNote(record.getProcessNote());
+                spec.setUpdatedAt(now);
                 MetadataUtil.nullSafeLabels(item).put("homeward.muyin.site/status", spec.getStatus().name());
                 return item;
             })
@@ -90,8 +123,9 @@ public class ClueReportServiceImpl implements ClueReportService {
     @Override
     public Mono<ClueSubmitResult> submit(String caseSlug, ClueSubmitRequest request,
                                          ServerRequest serverRequest) {
-        return findPublishedCase(caseSlug)
-            .zipWith(protectionSetting())
+        return publicSettings.requireEnabled()
+            .then(Mono.defer(() -> findPublishedCase(caseSlug)))
+            .zipWith(publicSettings.protection())
             .flatMap(tuple -> {
                 var caseItem = tuple.getT1();
                 var protection = tuple.getT2();
@@ -100,19 +134,20 @@ public class ClueReportServiceImpl implements ClueReportService {
                     protection.ipHashSaltOrDefault());
                 var decision = protectionService.tryAccept(caseSlug, ipHash, request, protection);
                 if (!decision.isAllowed()) {
-                    return Mono.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    return Mono.error(new ResponseStatusException(decision.getRejectionStatus(),
                         decision.getReason()));
                 }
+                String token = ReceiptSupport.generateToken();
                 return createClue(caseItem, request, ipHash,
-                    HomewardRequestSupport.userAgent(serverRequest));
-            })
-            .flatMap(clue -> notifyService.notifySubmitted(clue)
-                .onErrorResume(error -> Mono.empty())
-                .thenReturn(clue))
-            .map(clue -> ClueSubmitResult.builder()
-                .status(clue.getSpec().getStatus().name())
-                .message("线索已提交，感谢你的帮助")
-                .build());
+                    HomewardRequestSupport.userAgent(serverRequest), ReceiptSupport.hashToken(token))
+                    .flatMap(clue -> notifyService.notifySubmitted(clue)
+                        .onErrorResume(error -> Mono.empty())
+                        .thenReturn(ClueSubmitResult.builder()
+                            .status(clue.getSpec().getStatus().name())
+                            .message("线索已提交，请保存回执凭证以查询处理进度")
+                            .receiptToken(token)
+                            .build()));
+            });
     }
 
     @Override
@@ -124,7 +159,7 @@ public class ClueReportServiceImpl implements ClueReportService {
     }
 
     private Mono<ClueReport> createClue(MissingPersonCase caseItem, ClueSubmitRequest request,
-                                        String ipHash, String userAgent) {
+                                        String ipHash, String userAgent, String receiptTokenHash) {
         var clue = new ClueReport();
         clue.setMetadata(new Metadata());
         clue.getMetadata().setName(ClueReport.EXTENSION_NAME_PREFIX + HomewardNames.randomSuffix());
@@ -139,6 +174,7 @@ public class ClueReportServiceImpl implements ClueReportService {
         spec.setLocation(trimToNull(request.getLocation()));
         spec.setIpHash(ipHash);
         spec.setUserAgent(userAgent);
+        spec.setReceiptTokenHash(receiptTokenHash);
         spec.setStatus(ClueStatus.PENDING);
         spec.setSubmittedAt(Instant.now());
         spec.setUpdatedAt(spec.getSubmittedAt());
@@ -148,19 +184,13 @@ public class ClueReportServiceImpl implements ClueReportService {
     }
 
     private Mono<MissingPersonCase> findPublishedCase(String slug) {
-        var options = ListOptions.builder()
+        var options = ListOptions.builder(MissingPersonCasePublicQuery.publishedOptions())
             .andQuery(equal("spec.slug", slug))
-            .andQuery(equal("spec.status", CaseStatus.PUBLISHED.name()))
             .build();
         return client.listBy(MissingPersonCase.class, options, PageRequestImpl.of(1, 1))
             .flatMap(result -> result.getItems().stream().findFirst()
                 .map(Mono::just)
                 .orElseGet(() -> Mono.error(notFound("寻亲案例不存在或未发布"))));
-    }
-
-    private Mono<HomewardProtectionSetting> protectionSetting() {
-        return settingFetcher.fetch(HomewardProtectionSetting.GROUP, HomewardProtectionSetting.class)
-            .defaultIfEmpty(HomewardProtectionSetting.defaults());
     }
 
     private static ResponseStatusException notFound(String message) {

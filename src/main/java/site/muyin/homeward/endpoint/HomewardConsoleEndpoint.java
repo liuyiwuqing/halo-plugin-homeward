@@ -8,6 +8,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import site.muyin.homeward.endpoint.routes.CaseApplicationRoutes;
 import site.muyin.homeward.endpoint.routes.ClueReportRoutes;
 import site.muyin.homeward.endpoint.routes.DashboardRoutes;
 import site.muyin.homeward.endpoint.routes.MissingPersonCaseRoutes;
@@ -26,9 +27,12 @@ public class HomewardConsoleEndpoint implements CustomEndpoint {
 
     private final DashboardRoutes dashboardRoutes;
 
+    private final CaseApplicationRoutes applicationRoutes;
+
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return SpringdocRouteBuilder.route()
+            .nest(RequestPredicates.path("applications"), applicationRoutes::consoleRoutes)
             .nest(RequestPredicates.path("cases"), caseRoutes::consoleRoutes)
             .nest(RequestPredicates.path("clues"), clueRoutes::consoleRoutes)
             .nest(RequestPredicates.path("dashboard"), dashboardRoutes::consoleRoutes)

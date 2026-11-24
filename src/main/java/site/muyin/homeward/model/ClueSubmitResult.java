@@ -10,4 +10,6 @@ public class ClueSubmitResult {
     private String status;
 
     private String message;
+
+    private String receiptToken;
 }

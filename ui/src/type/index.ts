@@ -2,6 +2,15 @@ export type CaseStatus = 'DRAFT' | 'PUBLISHED' | 'FOUND' | 'ARCHIVED'
 
 export type ClueStatus = 'PENDING' | 'CONTACTED' | 'INVALID' | 'RESOLVED'
 
+export interface ClueProcessingRecord {
+  previousStatus?: ClueStatus
+  status?: ClueStatus
+  handler?: string
+  processNote?: string
+  processedAt?: string
+  legacy?: boolean
+}
+
 export interface MissingPersonCaseVO {
   name?: string
   slug?: string
@@ -23,6 +32,8 @@ export interface MissingPersonCaseVO {
   sourceUrl?: string
   status?: CaseStatus
   priority?: number
+  publishedAt?: string
+  foundAt?: string
 }
 
 export interface ClueReportVO {
@@ -39,6 +50,8 @@ export interface ClueReportVO {
   handler?: string
   processNote?: string
   submittedAt?: string
+  updatedAt?: string
+  processingHistory?: ClueProcessingRecord[]
 }
 
 export interface ListResult<T> {

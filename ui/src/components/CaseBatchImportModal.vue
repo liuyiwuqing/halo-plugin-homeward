@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { VButton, VModal } from '@halo-dev/components'
-import type {
-  CaseImportBatchItem,
-  CaseImportBatchPreview,
-  CaseImportBatchRequest,
-} from '@/type'
+import type { CaseImportBatchItem, CaseImportBatchPreview, CaseImportBatchRequest } from '@/type'
 
 const props = defineProps<{
   visible: boolean
@@ -19,6 +15,7 @@ const emit = defineEmits<{
   close: []
   preview: [payload: CaseImportBatchRequest, files: File[]]
   review: [item: CaseImportBatchItem]
+  'new-batch': []
 }>()
 
 const form = reactive({ sourceText: '' })
@@ -39,8 +36,8 @@ const batchImportPlaceholder = [
 ].join('\n')
 
 watch(
-  () => props.visible,
-  (visible) => {
+  () => [props.visible, props.result] as const,
+  ([visible]) => {
     if (!visible || props.result) return
     form.sourceText = ''
     selectedFiles.value = []
@@ -130,20 +127,30 @@ function isReviewed(index: number) {
             @change="handleFileChange"
           />
           <small>
-            {{ selectedFiles.length ? `已选择 ${selectedFiles.length} 个文档` : '支持 PDF、Word、TXT、Markdown、HTML。' }}
+            {{
+              selectedFiles.length
+                ? `已选择 ${selectedFiles.length} 个文档`
+                : '支持 PDF、Word、TXT、Markdown、HTML。'
+            }}
           </small>
         </label>
       </template>
       <template v-else>
         <div class="homeward-batch-import-summary">
           <strong>AI 解析完成</strong>
-          <span>成功 {{ result?.succeeded || 0 }} 条，失败 {{ result?.failed || 0 }} 条。请逐条核对后保存。</span>
+          <span
+            >成功 {{ result?.succeeded || 0 }} 条，失败
+            {{ result?.failed || 0 }} 条。请逐条核对后保存。</span
+          >
+          <small>关闭后可在本页继续核对；刷新或离开页面会清除尚未保存的结果。</small>
         </div>
         <ul class="homeward-batch-import-results">
           <li v-for="item in result?.items || []" :key="item.index">
             <div>
               <strong>{{ item.preview?.caseData.personName || '未识别姓名' }}</strong>
-              <span>{{ item.preview?.caseData.title || item.sourceUrl || `第 ${item.index + 1} 条资料` }}</span>
+              <span>{{
+                item.preview?.caseData.title || item.sourceUrl || `第 ${item.index + 1} 条资料`
+              }}</span>
               <small v-if="item.error" class="is-error">{{ item.error }}</small>
               <small v-else-if="isReviewed(item.index)" class="is-reviewed">已保存</small>
             </div>
@@ -163,6 +170,14 @@ function isReviewed(index: number) {
     </section>
     <template #footer>
       <VButton type="secondary" :disabled="loading" @click="emit('close')">关闭</VButton>
+      <VButton
+        v-if="reviewing"
+        data-testid="new-batch-import"
+        type="secondary"
+        :disabled="loading"
+        @click="emit('new-batch')"
+        >开始新批次</VButton
+      >
       <VButton
         v-if="!reviewing"
         data-testid="preview-batch-import"

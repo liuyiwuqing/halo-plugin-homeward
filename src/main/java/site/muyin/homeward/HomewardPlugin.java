@@ -6,6 +6,7 @@ import run.halo.app.extension.SchemeManager;
 import run.halo.app.extension.index.IndexSpecs;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
+import site.muyin.homeward.scheme.CaseApplication;
 import site.muyin.homeward.scheme.ClueReport;
 import site.muyin.homeward.scheme.MissingPersonCase;
 
@@ -53,6 +54,9 @@ public class HomewardPlugin extends BasePlugin {
         });
 
         schemeManager.register(ClueReport.class, indexSpecs -> {
+            indexSpecs.add(IndexSpecs.<ClueReport, String>single("spec.receiptTokenHash", String.class)
+                .unique(true).nullable(true)
+                .indexFunc(item -> item.getSpec() == null ? null : item.getSpec().getReceiptTokenHash()));
             indexSpecs.add(IndexSpecs.<ClueReport, String>single("spec.caseSlug", String.class)
                 .indexFunc(item -> item.getSpec() == null ? null : item.getSpec().getCaseSlug()));
             indexSpecs.add(IndexSpecs.<ClueReport, String>single("spec.caseTitle", String.class)
@@ -71,10 +75,19 @@ public class HomewardPlugin extends BasePlugin {
                     "spec.submittedAt", java.time.Instant.class)
                 .indexFunc(item -> item.getSpec() == null ? null : item.getSpec().getSubmittedAt()));
         });
+
+        schemeManager.register(CaseApplication.class, indexSpecs -> {
+            indexSpecs.add(IndexSpecs.<CaseApplication, String>single("spec.status", String.class)
+                .indexFunc(item -> item.getSpec() == null || item.getSpec().getStatus() == null
+                    ? null : item.getSpec().getStatus().name()));
+            indexSpecs.add(IndexSpecs.<CaseApplication, java.time.Instant>single("spec.submittedAt", java.time.Instant.class)
+                .indexFunc(item -> item.getSpec() == null ? null : item.getSpec().getSubmittedAt()));
+        });
     }
 
     @Override
     public void stop() {
+        schemeManager.unregister(Scheme.buildFromType(CaseApplication.class));
         schemeManager.unregister(Scheme.buildFromType(ClueReport.class));
         schemeManager.unregister(Scheme.buildFromType(MissingPersonCase.class));
     }

@@ -1,5 +1,11 @@
 package site.muyin.homeward.service;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import site.muyin.homeward.model.ClueSubmitRequest;
+import site.muyin.homeward.model.ProtectionCheckResult;
+import site.muyin.homeward.setting.HomewardProtectionSetting;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -7,10 +13,6 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import org.springframework.stereotype.Service;
-import site.muyin.homeward.model.ClueSubmitRequest;
-import site.muyin.homeward.model.ProtectionCheckResult;
-import site.muyin.homeward.setting.HomewardProtectionSetting;
 
 @Service
 public class ClueProtectionService {
@@ -33,7 +35,7 @@ public class ClueProtectionService {
                                            HomewardProtectionSetting setting) {
         var effectiveSetting = setting == null ? HomewardProtectionSetting.defaults() : setting;
         if (!effectiveSetting.clueSubmissionEnabledOrDefault()) {
-            return ProtectionCheckResult.rejected("线索提交暂未开放");
+            return ProtectionCheckResult.rejected(HttpStatus.SERVICE_UNAVAILABLE, "线索提交暂未开放");
         }
         if (request == null) {
             return ProtectionCheckResult.rejected("请求内容不能为空");
@@ -47,6 +49,10 @@ public class ClueProtectionService {
         if (!hasText(request.getContent())
             || request.getContent().trim().length() < effectiveSetting.minContentLengthOrDefault()) {
             return ProtectionCheckResult.rejected("线索内容太短，请补充更多细节");
+        }
+        if (tooLong(request.getContact(), 120) || tooLong(request.getContent(), 3000)
+            || tooLong(request.getSubmitterName(), 80) || tooLong(request.getLocation(), 200)) {
+            return ProtectionCheckResult.rejected("提交内容超出长度限制，请缩短后重试");
         }
 
         int limit = effectiveSetting.maxSubmissionsPerHourOrDefault();
@@ -62,7 +68,8 @@ public class ClueProtectionService {
                 bucket.removeFirst();
             }
             if (bucket.size() >= limit) {
-                return ProtectionCheckResult.rejected("提交太频繁，请稍后再试");
+                return ProtectionCheckResult.rejected(HttpStatus.TOO_MANY_REQUESTS,
+                    "提交太频繁，请稍后再试");
             }
             bucket.addLast(now);
         }
@@ -71,5 +78,9 @@ public class ClueProtectionService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean tooLong(String value, int maxLength) {
+        return value != null && value.trim().length() > maxLength;
     }
 }

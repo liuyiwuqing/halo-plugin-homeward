@@ -1,16 +1,13 @@
 package site.muyin.homeward.endpoint.routes;
 
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.buffer.DataBufferLimitException;
-import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springdoc.core.fn.builders.schema.Builder;
 import org.springdoc.webflux.core.fn.SpringdocRouteBuilder;
-import org.springframework.http.MediaType;
+import org.springframework.core.io.buffer.DataBufferLimitException;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.http.codec.multipart.FormFieldPart;
 import org.springframework.http.codec.multipart.Part;
@@ -31,12 +28,15 @@ import site.muyin.homeward.model.CaseImportBatchPreview;
 import site.muyin.homeward.model.CaseImportBatchRequest;
 import site.muyin.homeward.model.CaseImportPreview;
 import site.muyin.homeward.model.CaseImportRequest;
-import site.muyin.homeward.model.MissingPersonCasePublicVO;
 import site.muyin.homeward.model.MissingPersonCaseVO;
-import site.muyin.homeward.model.WidgetResponse;
+import site.muyin.homeward.query.MissingPersonCasePublicQuery;
 import site.muyin.homeward.query.MissingPersonCaseQuery;
 import site.muyin.homeward.scheme.MissingPersonCase;
 import site.muyin.homeward.service.MissingPersonCaseService;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import static org.springdoc.core.fn.builders.apiresponse.Builder.responseBuilder;
 import static org.springdoc.core.fn.builders.content.Builder.contentBuilder;
@@ -141,6 +141,11 @@ public class MissingPersonCaseRoutes {
 
     public Mono<ServerResponse> detailForPublic(ServerRequest request) {
         return service.getPublishedBySlug(request.pathVariable("slug"))
+            .flatMap(response -> ServerResponse.ok().bodyValue(response));
+    }
+
+    public Mono<ServerResponse> listForPublic(ServerRequest request) {
+        return service.listForPublic(MissingPersonCasePublicQuery.from(request.queryParams()))
             .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 

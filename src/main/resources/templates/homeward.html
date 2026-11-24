@@ -9,7 +9,8 @@
     />
     <title>归航寻亲｜让回家的路被更多人看见</title>
     <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-public.css" />
-  </head>
+    <link rel="stylesheet" href="/plugins/homeward/assets/static/homeward/homeward-receipt.css" />
+</head>
   <body class="homeward-public-body">
     <aside class="homeward-not-found-notice" th:if="${homeward404}" aria-label="页面未找到提示">
       <strong>404 · 页面未找到</strong>
@@ -18,6 +19,7 @@
     </aside>
     <a class="homeward-skip-link" href="#homeward-page-content">跳到寻人档案</a>
     <main id="homeward-page" class="homeward-page">
+      <nav class="homeward-case-nav homeward-public-nav" aria-label="公众服务"><a href="/homeward/apply">提交寻亲申请</a><a href="/homeward/receipts">查询线索进度</a></nav>
       <section class="homeward-hero">
         <div class="homeward-hero__inner">
           <div class="homeward-brand" aria-label="归航寻亲公益项目">
@@ -62,9 +64,13 @@
         </div>
       </section>
     </main>
-    <script>
-      window.__HOMEWARD_PAGE__ = true;
+    <noscript><p class="homeward-section">请启用 JavaScript 以搜索档案和提交线索。档案详情链接可直接浏览。</p></noscript>
+    <script th:inline="javascript">
+      window.__HOMEWARD_404__ = /*[[${homeward404}]]*/ false;
+      window.__HOMEWARD_PAGE__ = !window.__HOMEWARD_404__;
     </script>
+    <script defer src="/plugins/homeward/assets/static/homeward/homeward-common.js"></script>
+    <script defer src="/plugins/homeward/assets/static/homeward/homeward-clue.js"></script>
     <script defer src="/plugins/homeward/assets/static/homeward/homeward-public.js"></script>
   </body>
 </html>

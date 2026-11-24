@@ -1,7 +1,5 @@
 package site.muyin.homeward.service.impl;
 
-import java.time.Instant;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -18,15 +16,18 @@ import site.muyin.homeward.enums.CaseStatus;
 import site.muyin.homeward.model.MissingPersonCasePublicVO;
 import site.muyin.homeward.model.MissingPersonCaseVO;
 import site.muyin.homeward.model.WidgetResponse;
+import site.muyin.homeward.query.MissingPersonCasePublicQuery;
 import site.muyin.homeward.query.MissingPersonCaseQuery;
 import site.muyin.homeward.scheme.MissingPersonCase;
 import site.muyin.homeward.service.MissingPersonCaseService;
-import site.muyin.homeward.setting.HomewardDisplaySetting;
-import site.muyin.homeward.setting.HomewardGeneralSetting;
+import site.muyin.homeward.setting.HomewardPublicSettings;
 import site.muyin.homeward.support.HomewardNames;
-import run.halo.app.plugin.ReactiveSettingFetcher;
+
+import java.time.Instant;
+import java.util.Objects;
 
 import static run.halo.app.extension.index.query.Queries.equal;
+import static run.halo.app.extension.index.query.Queries.isNull;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +35,16 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
 
     private final ReactiveExtensionClient client;
 
-    private final ReactiveSettingFetcher settingFetcher;
+    private final HomewardPublicSettings publicSettings;
+
+    @Override
+    public Mono<ListResult<MissingPersonCasePublicVO>> listForPublic(MissingPersonCasePublicQuery query) {
+        return publicSettings.requireEnabled()
+            .then(Mono.defer(() -> client.listBy(MissingPersonCase.class,
+                query.toListOptions(), query.toPageRequest())))
+            .map(result -> new ListResult<>(result.getPage(), result.getSize(), result.getTotal(),
+                result.getItems().stream().map(MissingPersonCasePublicVO::from).toList()));
+    }
 
     @Override
     public Mono<ListResult<MissingPersonCaseVO>> listForConsole(MissingPersonCaseQuery query) {
@@ -88,6 +98,7 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
                     spec.setFoundAt(now);
                 }
                 spec.setUpdatedAt(now);
+                MetadataUtil.nullSafeLabels(item).put("homeward.muyin.site/status", status.name());
                 return item;
             })
             .flatMap(client::update)
@@ -104,34 +115,39 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
 
     @Override
     public Mono<MissingPersonCasePublicVO> getPublishedBySlug(String slug) {
-        return findPublishedBySlug(slug)
+        return publicSettings.requireEnabled().then(Mono.defer(() -> findPublishedBySlug(slug)))
             .map(MissingPersonCasePublicVO::from);
     }
 
     @Override
     public Mono<WidgetResponse> widget(boolean publicPage) {
-        return Mono.zip(generalSetting(), displaySetting())
+        return Mono.zip(publicSettings.general(), publicSettings.display(), publicSettings.protection())
             .flatMap(tuple -> {
                 var general = tuple.getT1();
                 var display = tuple.getT2();
+                var protection = tuple.getT3();
+                int size = publicPage
+                    ? display.publicPageCaseLimitOrDefault()
+                    : display.widgetCaseLimitOrDefault();
                 if (!general.enabledOrDefault()) {
                     return Mono.just(WidgetResponse.builder()
                         .enabled(false)
+                        .clueSubmissionEnabled(false)
+                        .minContentLength(protection.minContentLengthOrDefault())
+                        .pageSize(size)
                         .cases(java.util.List.of())
                         .publicPageUrl("/homeward")
                         .build());
                 }
-                var options = ListOptions.builder()
-                    .andQuery(equal("spec.status", CaseStatus.PUBLISHED.name()))
-                    .build();
-                int size = publicPage
-                    ? display.publicPageCaseLimitOrDefault()
-                    : display.widgetCaseLimitOrDefault();
+                var options = MissingPersonCasePublicQuery.publishedOptions();
                 var page = PageRequestImpl.of(1, size,
                     Sort.by("spec.priority").descending().and(Sort.by("spec.publishedAt").descending()));
                 return client.listBy(MissingPersonCase.class, options, page)
                     .map(result -> WidgetResponse.builder()
                         .enabled(true)
+                        .clueSubmissionEnabled(protection.clueSubmissionEnabledOrDefault())
+                        .minContentLength(protection.minContentLengthOrDefault())
+                        .pageSize(size)
                         .title(general.getPublicPageTitle())
                         .subtitle(general.getPublicPageSubtitle())
                         .contactText(general.getContactText())
@@ -160,14 +176,24 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
         if (!hasText(slug)) {
             return Mono.error(notFound("寻亲案例不存在"));
         }
-        var options = ListOptions.builder()
+        var options = ListOptions.builder(MissingPersonCasePublicQuery.publishedOptions())
             .andQuery(equal("spec.slug", slug))
-            .andQuery(equal("spec.status", CaseStatus.PUBLISHED.name()))
             .build();
         return client.listBy(MissingPersonCase.class, options, PageRequestImpl.of(1, 1))
             .flatMap(result -> result.getItems().stream().findFirst()
                 .map(Mono::just)
-                .orElseGet(() -> Mono.error(notFound("寻亲案例不存在"))));
+                .orElseGet(() -> closedOrNotFound(slug)));
+    }
+
+    private Mono<MissingPersonCase> closedOrNotFound(String slug) {
+        var options = ListOptions.builder().andQuery(equal("spec.slug", slug))
+            .andQuery(equal("spec.status", CaseStatus.FOUND.name()))
+            .andQuery(isNull("metadata.deletionTimestamp")).build();
+        return client.listBy(MissingPersonCase.class, options, PageRequestImpl.of(1, 1))
+            .flatMap(result -> Mono.error(result.getItems().stream()
+                .anyMatch(item -> item.getSpec().getPublishedAt() != null)
+                    ? new ResponseStatusException(HttpStatus.GONE, "这份寻亲信息已结案，请停止传播旧资料")
+                    : notFound("寻亲案例不存在")));
     }
 
     private MissingPersonCase normalizeForCreate(MissingPersonCase item) {
@@ -193,6 +219,9 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
         if (spec.getStatus() == CaseStatus.PUBLISHED && spec.getPublishedAt() == null) {
             spec.setPublishedAt(now);
         }
+        if (spec.getStatus() == CaseStatus.FOUND && spec.getFoundAt() == null) {
+            spec.setFoundAt(now);
+        }
         if (item.getMetadata() == null) {
             item.setMetadata(new Metadata());
         }
@@ -207,7 +236,13 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
         var source = spec(incoming);
         var target = spec(old);
         requireText(source.getPersonName(), "姓名不能为空");
-        target.setSlug(HomewardNames.slugOrGenerated(source.getSlug(), "case"));
+        String slug = HomewardNames.slugOrGenerated(source.getSlug(), "case");
+        if ((target.getPublishedAt() != null || target.getFoundAt() != null
+            || target.getStatus() == CaseStatus.PUBLISHED || target.getStatus() == CaseStatus.FOUND)
+            && !Objects.equals(target.getSlug(), slug)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "已公开案例的访问标识不能修改，以保留分享链接");
+        }
+        target.setSlug(slug);
         target.setTitle(firstText(source.getTitle(), source.getPersonName() + "的寻亲信息"));
         target.setPersonName(source.getPersonName());
         target.setGender(source.getGender());
@@ -241,16 +276,6 @@ public class MissingPersonCaseServiceImpl implements MissingPersonCaseService {
         MetadataUtil.nullSafeLabels(old).put("homeward.muyin.site/status", target.getStatus().name());
         MetadataUtil.nullSafeAnnotations(old);
         return old;
-    }
-
-    private Mono<HomewardGeneralSetting> generalSetting() {
-        return settingFetcher.fetch(HomewardGeneralSetting.GROUP, HomewardGeneralSetting.class)
-            .defaultIfEmpty(HomewardGeneralSetting.defaults());
-    }
-
-    private Mono<HomewardDisplaySetting> displaySetting() {
-        return settingFetcher.fetch(HomewardDisplaySetting.GROUP, HomewardDisplaySetting.class)
-            .defaultIfEmpty(HomewardDisplaySetting.defaults());
     }
 
     private static MissingPersonCase.Spec spec(MissingPersonCase item) {

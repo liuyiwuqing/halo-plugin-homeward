@@ -16,7 +16,8 @@ public interface ClueReportService {
 
     Mono<ClueReportVO> getForConsole(String name);
 
-    Mono<ClueReportVO> updateStatus(String name, ClueStatusUpdateRequest request);
+    Mono<ClueReportVO> updateStatus(String name, ClueStatusUpdateRequest request,
+                                  String authenticatedHandler);
 
     Mono<ClueReportVO> delete(String name);
 

@@ -8,6 +8,7 @@ spec:
       label: 基础设置
       value:
         enabled: true
+        applicationSubmissionEnabled: false
         publicPageTitle: 归航寻亲
         publicPageSubtitle: 每一次迷路，都值得被照亮。
         contactText: 如有线索，请通过表单提交，站长会尽快核验处理。
@@ -21,6 +22,11 @@ spec:
           label: 公益页标题
           value: 归航寻亲
           validation: required
+        - $formkit: switch
+          name: applicationSubmissionEnabled
+          label: 允许公众提交寻亲申请
+          value: false
+          help: 申请资料仅管理员可见；审核通过后转为草稿，核对资料与授权后再发布。
         - $formkit: textarea
           name: publicPageSubtitle
           label: 公益页副标题
@@ -44,14 +50,15 @@ spec:
           max: 12
         - $formkit: number
           name: publicPageCaseLimit
-          label: 公益页展示数量
+          label: 公益页每页数量
           value: 20
           min: 1
           max: 50
         - $formkit: switch
           name: inject404
-          label: 在 404 页面展示寻亲模块
+          label: 使用公益 404 页面
           value: true
+          help: 页面未找到时显示独立公益页面，保留 HTTP 404 状态；展示数量使用上方的 404 展示数量。
     - group: protection
       label: 防刷设置
       value:

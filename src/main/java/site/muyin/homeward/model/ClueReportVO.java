@@ -1,9 +1,11 @@
 package site.muyin.homeward.model;
 
-import java.time.Instant;
 import lombok.Data;
 import site.muyin.homeward.enums.ClueStatus;
 import site.muyin.homeward.scheme.ClueReport;
+
+import java.time.Instant;
+import java.util.List;
 
 @Data
 public class ClueReportVO {
@@ -38,6 +40,8 @@ public class ClueReportVO {
 
     private Instant updatedAt;
 
+    private List<ClueReport.ProcessingRecord> processingHistory;
+
     public static ClueReportVO from(ClueReport source) {
         var vo = new ClueReportVO();
         vo.setName(source.getMetadata() == null ? null : source.getMetadata().getName());
@@ -59,6 +63,8 @@ public class ClueReportVO {
         vo.setProcessNote(spec.getProcessNote());
         vo.setSubmittedAt(spec.getSubmittedAt());
         vo.setUpdatedAt(spec.getUpdatedAt());
+        vo.setProcessingHistory(spec.getProcessingHistory() == null
+            ? List.of() : List.copyOf(spec.getProcessingHistory()));
         return vo;
     }
 }

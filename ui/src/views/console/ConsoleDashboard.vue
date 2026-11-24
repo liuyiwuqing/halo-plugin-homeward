@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { VButton, VLoading } from '@halo-dev/components'
 import RiAddLine from '~icons/ri/add-line'
 import RiChatCheckLine from '~icons/ri/chat-check-line'
@@ -17,18 +17,18 @@ import {
   listCases,
   listClues,
   previewCaseImport,
-  previewCaseImportDocument,
   previewCaseImportBatch,
+  previewCaseImportDocument,
   previewCaseImportDocuments,
   saveCase,
   updateCaseStatus,
   updateClueStatus,
 } from '@/api'
 import type {
-  CaseImportRequest,
   CaseImportBatchItem,
   CaseImportBatchPreview,
   CaseImportBatchRequest,
+  CaseImportRequest,
   CaseStatus,
   ClueReportVO,
   ClueStatus,
@@ -44,17 +44,38 @@ import ClueDetailModal from '@/components/ClueDetailModal.vue'
 import DashboardOverview from '@/components/DashboardOverview.vue'
 import CaseListPanel from '@/components/CaseListPanel.vue'
 import ClueListPanel from '@/components/ClueListPanel.vue'
+import CaseApplicationPanel from '@/components/CaseApplicationPanel.vue'
 
-type TabKey = 'overview' | 'cases' | 'clues' | 'preview'
+type TabKey = 'overview' | 'cases' | 'clues' | 'applications' | 'preview'
 
 const activeTab = ref<TabKey>('overview')
-const loading = ref(false)
 const loadError = ref('')
+const caseLoading = ref(false)
+const clueLoading = ref(false)
+const statsLoading = ref(false)
+const loading = computed(() => caseLoading.value || clueLoading.value || statsLoading.value)
+const caseLoadError = ref('')
+const clueLoadError = ref('')
+const statsLoadError = ref('')
+const displayedLoadError = computed(
+  () => loadError.value || caseLoadError.value || clueLoadError.value || statsLoadError.value,
+)
 const message = ref('')
 const caseKeyword = ref('')
 const clueKeyword = ref('')
 const caseStatusFilter = ref<'ALL' | CaseStatus>('ALL')
 const clueStatusFilter = ref<'ALL' | ClueStatus>('ALL')
+const casePage = ref(1)
+const cluePage = ref(1)
+const caseSize = ref(30)
+const clueSize = ref(30)
+const caseTotal = ref(0)
+const clueTotal = ref(0)
+const caseQueryKeyword = ref('')
+const clueQueryKeyword = ref('')
+let caseRequestId = 0
+let clueRequestId = 0
+let statsRequestId = 0
 const cases = ref<MissingPersonCaseVO[]>([])
 const clues = ref<ClueReportVO[]>([])
 const stats = ref<DashboardStats>({
@@ -78,6 +99,7 @@ const caseBatchImporting = ref(false)
 const caseBatchImportError = ref('')
 const caseBatchImportResult = ref<CaseImportBatchPreview | null>(null)
 const caseBatchReviewed = ref<number[]>([])
+const batchResetConfirmation = ref(false)
 const batchReviewingIndex = ref<number | null>(null)
 const pendingDeleteCase = ref<MissingPersonCaseVO | null>(null)
 const deletingCase = ref(false)
@@ -92,6 +114,7 @@ const tabs = [
   { id: 'overview' as const, label: '概览', icon: RiDashboard3Line },
   { id: 'cases' as const, label: '寻亲案例', icon: RiFileUserLine },
   { id: 'clues' as const, label: '线索处理', icon: RiChatCheckLine },
+  { id: 'applications' as const, label: '寻亲申请', icon: RiFileUserLine },
   { id: 'preview' as const, label: '公益页预览', icon: RiWindowLine },
 ]
 
@@ -104,37 +127,139 @@ function setMessage(value: string) {
   }, 2600)
 }
 
-async function refreshAll() {
-  loading.value = true
-  loadError.value = ''
+async function refreshCases(deletedName?: string) {
+  const requestId = ++caseRequestId
+  caseLoading.value = true
+  caseLoadError.value = ''
   try {
-    const [statsResult, caseResult, clueResult] = await Promise.allSettled([
-      getDashboardStats(),
-      listCases({ page: 1, size: 30, keyword: caseKeyword.value || undefined }),
-      listClues({ page: 1, size: 30, keyword: clueKeyword.value || undefined }),
-    ])
-    if (statsResult.status === 'fulfilled') {
-      stats.value = statsResult.value
+    const result = await listCases({
+      page: casePage.value,
+      size: caseSize.value,
+      keyword: caseQueryKeyword.value || undefined,
+      ...(caseStatusFilter.value !== 'ALL' ? { status: caseStatusFilter.value } : {}),
+    })
+    if (requestId !== caseRequestId) return
+    const items = result.items || []
+    // Halo 索引可能短暂返回已删除项；提交列表前排除，避免等待其他刷新请求时重新展示。
+    const staleCount = deletedName ? items.filter((item) => item.name === deletedName).length : 0
+    caseTotal.value = Math.max(0, result.total - staleCount)
+    const lastPage = Math.max(1, Math.ceil(caseTotal.value / caseSize.value))
+    if (casePage.value > lastPage) {
+      casePage.value = lastPage
+      await refreshCases(deletedName)
+      return
     }
-    if (caseResult.status === 'fulfilled') {
-      cases.value = caseResult.value.items || []
-    }
-    if (clueResult.status === 'fulfilled') {
-      clues.value = clueResult.value.items || []
-    }
+    cases.value = deletedName ? items.filter((item) => item.name !== deletedName) : items
+  } catch (error) {
+    if (requestId !== caseRequestId) return
+    cases.value = []
+    caseLoadError.value = error instanceof Error ? error.message : '案例加载失败，请重试'
+  } finally {
+    if (requestId === caseRequestId) caseLoading.value = false
+  }
+}
 
-    const failedResult = [statsResult, caseResult, clueResult].find(
-      (result) => result.status === 'rejected',
-    )
-    if (failedResult?.status === 'rejected') {
-      loadError.value =
-        failedResult.reason instanceof Error
-          ? failedResult.reason.message
-          : '部分数据加载失败，请检查网络后重试'
+async function refreshClues(deletedName?: string) {
+  const requestId = ++clueRequestId
+  clueLoading.value = true
+  clueLoadError.value = ''
+  try {
+    const result = await listClues({
+      page: cluePage.value,
+      size: clueSize.value,
+      keyword: clueQueryKeyword.value || undefined,
+      ...(clueStatusFilter.value !== 'ALL' ? { status: clueStatusFilter.value } : {}),
+    })
+    if (requestId !== clueRequestId) return
+    const items = result.items || []
+    const staleCount = deletedName ? items.filter((item) => item.name === deletedName).length : 0
+    clueTotal.value = Math.max(0, result.total - staleCount)
+    const lastPage = Math.max(1, Math.ceil(clueTotal.value / clueSize.value))
+    if (cluePage.value > lastPage) {
+      cluePage.value = lastPage
+      await refreshClues(deletedName)
+      return
+    }
+    clues.value = deletedName ? items.filter((item) => item.name !== deletedName) : items
+  } catch (error) {
+    if (requestId !== clueRequestId) return
+    clues.value = []
+    clueLoadError.value = error instanceof Error ? error.message : '线索加载失败，请重试'
+  } finally {
+    if (requestId === clueRequestId) clueLoading.value = false
+  }
+}
+
+async function refreshStats() {
+  const requestId = ++statsRequestId
+  statsLoading.value = true
+  statsLoadError.value = ''
+  try {
+    const result = await getDashboardStats()
+    if (requestId === statsRequestId) stats.value = result
+  } catch (error) {
+    if (requestId === statsRequestId) {
+      statsLoadError.value = error instanceof Error ? error.message : '统计加载失败，请重试'
     }
   } finally {
-    loading.value = false
+    if (requestId === statsRequestId) statsLoading.value = false
   }
+}
+
+async function refreshAll() {
+  loadError.value = ''
+  await Promise.all([refreshStats(), refreshCases(), refreshClues()])
+}
+
+function searchCases() {
+  caseQueryKeyword.value = caseKeyword.value.trim()
+  casePage.value = 1
+  return refreshCases()
+}
+
+function searchClues() {
+  clueQueryKeyword.value = clueKeyword.value.trim()
+  cluePage.value = 1
+  return refreshClues()
+}
+
+function filterCases(status: 'ALL' | CaseStatus) {
+  caseStatusFilter.value = status
+  casePage.value = 1
+  return refreshCases()
+}
+
+function filterClues(status: 'ALL' | ClueStatus) {
+  clueStatusFilter.value = status
+  cluePage.value = 1
+  return refreshClues()
+}
+
+function paginateCases(value: { page: number; size: number }) {
+  casePage.value = value.size === caseSize.value ? value.page : 1
+  caseSize.value = value.size
+  return refreshCases()
+}
+
+function paginateClues(value: { page: number; size: number }) {
+  cluePage.value = value.size === clueSize.value ? value.page : 1
+  clueSize.value = value.size
+  return refreshClues()
+}
+
+function navigateOverview(
+  target:
+    { tab: 'cases'; status: 'ALL' | CaseStatus } | { tab: 'clues'; status: 'ALL' | ClueStatus },
+) {
+  activeTab.value = target.tab
+  if (target.tab === 'cases') {
+    caseKeyword.value = ''
+    caseQueryKeyword.value = ''
+    return filterCases(target.status)
+  }
+  clueKeyword.value = ''
+  clueQueryKeyword.value = ''
+  return filterClues(target.status)
 }
 
 function editCase(item: MissingPersonCaseVO) {
@@ -161,8 +286,6 @@ function openCaseImport() {
 
 function openCaseBatchImport() {
   caseBatchImportError.value = ''
-  caseBatchImportResult.value = null
-  caseBatchReviewed.value = []
   caseBatchImportVisible.value = true
 }
 
@@ -175,9 +298,23 @@ function closeCaseImport() {
 function closeCaseBatchImport() {
   if (caseBatchImporting.value) return
   caseBatchImportVisible.value = false
+  caseBatchImportError.value = ''
+}
+
+function requestNewBatch() {
+  const unsaved = caseBatchImportResult.value?.items.some(
+    (item) => item.preview && !caseBatchReviewed.value.includes(item.index),
+  )
+  if (unsaved) batchResetConfirmation.value = true
+  else startNewBatch()
+}
+
+function startNewBatch() {
   caseBatchImportResult.value = null
   caseBatchReviewed.value = []
   caseBatchImportError.value = ''
+  batchReviewingIndex.value = null
+  batchResetConfirmation.value = false
 }
 
 async function previewImport(request: CaseImportRequest) {
@@ -334,8 +471,11 @@ async function confirmCaseDelete() {
   try {
     await deleteCase(name)
     pendingDeleteCase.value = null
-    await refreshAll()
-    cases.value = cases.value.filter((item) => item.name !== name)
+    if (casePage.value > 1 && cases.value.length === 1 && cases.value[0]?.name === name) {
+      casePage.value -= 1
+    }
+    loadError.value = ''
+    await Promise.all([refreshStats(), refreshCases(name), refreshClues()])
     setMessage('案例已删除')
   } finally {
     deletingCase.value = false
@@ -352,10 +492,7 @@ async function saveClueUpdate(value: { status: ClueStatus; processNote?: string 
   clueSaving.value = true
   clueSaveError.value = ''
   try {
-    await updateClueStatus(selectedClue.value.name, {
-      ...value,
-      handler: 'admin',
-    })
+    await updateClueStatus(selectedClue.value.name, value)
     selectedClue.value = null
     await refreshAll()
     setMessage('线索处理结果已保存')
@@ -377,8 +514,11 @@ async function confirmClueDelete() {
   try {
     await deleteClue(name)
     pendingDeleteClue.value = null
-    await refreshAll()
-    clues.value = clues.value.filter((item) => item.name !== name)
+    if (cluePage.value > 1 && clues.value.length === 1 && clues.value[0]?.name === name) {
+      cluePage.value -= 1
+    }
+    loadError.value = ''
+    await Promise.all([refreshStats(), refreshCases(), refreshClues(name)])
     setMessage('线索已删除')
   } finally {
     deletingClue.value = false
@@ -438,10 +578,10 @@ onMounted(refreshAll)
       <Transition name="homeward-toast">
         <p v-if="message" class="homeward-admin-message" role="status">{{ message }}</p>
       </Transition>
-      <div v-if="loadError" class="homeward-error-banner" role="alert">
+      <div v-if="displayedLoadError" class="homeward-error-banner" role="alert">
         <div>
           <strong>暂时无法完成操作</strong>
-          <span>{{ loadError }}</span>
+          <span>{{ displayedLoadError }}</span>
         </div>
         <button type="button" @click="refreshAll">重新加载</button>
       </div>
@@ -456,28 +596,44 @@ onMounted(refreshAll)
             v-if="activeTab === 'overview'"
             :stats="stats"
             @create="createCase"
-            @navigate="activeTab = $event"
+            @navigate="navigateOverview"
           />
 
           <CaseListPanel
             v-if="activeTab === 'cases'"
             v-model:keyword="caseKeyword"
-            v-model:status-filter="caseStatusFilter"
+            :status-filter="caseStatusFilter"
             :cases="cases"
+            :page="casePage"
+            :size="caseSize"
+            :total="caseTotal"
+            :loading="caseLoading"
+            :error="caseLoadError"
             :action-name="caseActionName"
-            @search="refreshAll"
+            @update:status-filter="filterCases"
+            @search="searchCases"
+            @paginate="paginateCases"
             @create="createCase"
             @edit="editCase"
             @action="changeCaseStatus"
             @delete="requestCaseDelete"
           />
 
+          <CaseApplicationPanel v-if="activeTab === 'applications'" @created="refreshAll" />
           <ClueListPanel
             v-if="activeTab === 'clues'"
             v-model:keyword="clueKeyword"
-            v-model:status-filter="clueStatusFilter"
+            :status-filter="clueStatusFilter"
             :clues="clues"
-            @search="refreshAll"
+            :page="cluePage"
+            :size="clueSize"
+            :total="clueTotal"
+            :pending-count="stats.pendingClues"
+            :loading="clueLoading"
+            :error="clueLoadError"
+            @update:status-filter="filterClues"
+            @search="searchClues"
+            @paginate="paginateClues"
             @open="openClue"
             @delete="requestClueDelete"
           />
@@ -535,6 +691,16 @@ onMounted(refreshAll)
         @close="closeCaseBatchImport"
         @preview="previewBatchImport"
         @review="reviewBatchImport"
+        @new-batch="requestNewBatch"
+      />
+      <ConfirmActionModal
+        v-if="batchResetConfirmation"
+        visible
+        title="开始新批次"
+        description="当前批次仍有未保存的解析结果。开始新批次后将清除这些结果，已保存的案例不受影响。"
+        confirm-text="清除结果并继续"
+        @close="batchResetConfirmation = false"
+        @confirm="startNewBatch"
       />
       <ConfirmActionModal
         v-if="pendingDeleteCase"

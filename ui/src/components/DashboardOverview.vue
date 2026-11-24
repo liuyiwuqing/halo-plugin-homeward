@@ -6,13 +6,16 @@ import RiCheckboxCircleLine from '~icons/ri/checkbox-circle-line'
 import RiFileList3Line from '~icons/ri/file-list-3-line'
 import RiInboxArchiveLine from '~icons/ri/inbox-archive-line'
 import RiRadarLine from '~icons/ri/radar-line'
-import type { DashboardStats } from '@/type'
+import type { CaseStatus, ClueStatus, DashboardStats } from '@/type'
 
 const props = defineProps<{ stats: DashboardStats }>()
 
 const emit = defineEmits<{
   create: []
-  navigate: [value: 'cases' | 'clues']
+  navigate: [
+    value:
+      { tab: 'cases'; status: 'ALL' | CaseStatus } | { tab: 'clues'; status: 'ALL' | ClueStatus },
+  ]
 }>()
 
 const publishRate = computed(() => {
@@ -28,6 +31,7 @@ const metrics = computed(() => [
     icon: RiFileList3Line,
     tone: 'ink',
     target: 'cases' as const,
+    status: 'ALL' as const,
   },
   {
     label: '公益展示中',
@@ -36,6 +40,7 @@ const metrics = computed(() => [
     icon: RiRadarLine,
     tone: 'blue',
     target: 'cases' as const,
+    status: 'PUBLISHED' as const,
   },
   {
     label: '已经团圆',
@@ -44,6 +49,7 @@ const metrics = computed(() => [
     icon: RiCheckboxCircleLine,
     tone: 'green',
     target: 'cases' as const,
+    status: 'FOUND' as const,
   },
   {
     label: '待处理线索',
@@ -52,6 +58,7 @@ const metrics = computed(() => [
     icon: RiInboxArchiveLine,
     tone: 'amber',
     target: 'clues' as const,
+    status: 'PENDING' as const,
   },
 ])
 </script>
@@ -75,7 +82,14 @@ const metrics = computed(() => [
           :data-testid="`metric-${metric.target}-${metric.tone}`"
           type="button"
           class="homeward-metric-card"
-          @click="emit('navigate', metric.target)"
+          @click="
+            emit(
+              'navigate',
+              metric.target === 'cases'
+                ? { tab: 'cases', status: metric.status }
+                : { tab: 'clues', status: metric.status },
+            )
+          "
         >
           <div :class="['homeward-metric-icon', `is-${metric.tone}`]">
             <component :is="metric.icon" />
@@ -104,11 +118,16 @@ const metrics = computed(() => [
         v-if="stats.pendingClues"
         type="button"
         class="homeward-text-action"
-        @click="emit('navigate', 'clues')"
+        @click="emit('navigate', { tab: 'clues', status: 'PENDING' })"
       >
         处理线索 <RiArrowRightLine />
       </button>
-      <button v-else type="button" class="homeward-text-action" @click="emit('navigate', 'cases')">
+      <button
+        v-else
+        type="button"
+        class="homeward-text-action"
+        @click="emit('navigate', { tab: 'cases', status: 'ALL' })"
+      >
         查看案例 <RiArrowRightLine />
       </button>
     </aside>

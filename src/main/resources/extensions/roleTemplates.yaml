@@ -11,7 +11,7 @@ metadata:
     rbac.authorization.halo.run/module: "归航寻亲"
 rules:
   - apiGroups: ["console.homeward.muyin.site"]
-    resources: ["cases", "clues", "dashboard"]
+    resources: ["cases", "clues", "dashboard", "applications"]
     verbs: ["get", "list"]
 ---
 apiVersion: v1alpha1
@@ -33,7 +33,7 @@ rules:
     verbs: ["*"]
   - apiGroups: ["homeward.muyin.site"]
     resources: ["missingpersoncases", "cluereports"]
-    verbs: ["*"]
+    verbs: ["get", "list"]
 ---
 apiVersion: v1alpha1
 kind: Role
@@ -50,12 +50,22 @@ rules:
   - apiGroups: ["public.homeward.muyin.site"]
     resources: ["widget", "cases", "cases/clues"]
     verbs: ["get", "list", "create"]
+  - apiGroups: ["public.homeward.muyin.site"]
+    resources: ["applications", "clue-receipts"]
+    verbs: ["create"]
+  - apiGroups: ["public.homeward.muyin.site"]
+    resources: ["applications"]
+    verbs: ["get"]
   - nonResourceURLs:
       - /apis/public.homeward.muyin.site/v1alpha1/widget
+      - /apis/public.homeward.muyin.site/v1alpha1/cases
       - /apis/public.homeward.muyin.site/v1alpha1/cases/*
+      - /apis/public.homeward.muyin.site/v1alpha1/applications/config
     verbs:
       - get
   - nonResourceURLs:
       - /apis/public.homeward.muyin.site/v1alpha1/cases/*/clues
+      - /apis/public.homeward.muyin.site/v1alpha1/applications
+      - /apis/public.homeward.muyin.site/v1alpha1/clue-receipts/lookup
     verbs:
       - create

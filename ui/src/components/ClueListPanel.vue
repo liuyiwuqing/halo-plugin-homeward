@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { VButton, VEmpty } from '@halo-dev/components'
+import { VButton, VEmpty, VLoading, VPagination } from '@halo-dev/components'
 import RiMapPin2Line from '~icons/ri/map-pin-2-line'
 import RiSearchLine from '~icons/ri/search-line'
 import type { ClueReportVO, ClueStatus } from '@/type'
 
 type ClueFilter = 'ALL' | ClueStatus
 
-const props = defineProps<{
+defineProps<{
   clues: ClueReportVO[]
+  page: number
+  size: number
+  total: number
+  pendingCount: number
+  loading?: boolean
+  error?: string
   keyword: string
   statusFilter: ClueFilter
 }>()
@@ -17,6 +22,7 @@ const emit = defineEmits<{
   'update:keyword': [value: string]
   'update:statusFilter': [value: ClueFilter]
   search: []
+  paginate: [value: { page: number; size: number }]
   open: [value: ClueReportVO]
   delete: [value: ClueReportVO]
 }>()
@@ -36,33 +42,20 @@ const labels: Record<ClueStatus, string> = {
   INVALID: '无效',
 }
 
-const filteredClues = computed(() =>
-  props.statusFilter === 'ALL'
-    ? props.clues
-    : props.clues.filter((item) => (item.status || 'PENDING') === props.statusFilter),
-)
-
-function filterCount(filter: ClueFilter) {
-  if (filter === 'ALL') return props.clues.length
-  return props.clues.filter((item) => (item.status || 'PENDING') === filter).length
-}
-
 function updateKeyword(event: Event) {
   emit('update:keyword', (event.target as HTMLInputElement).value)
 }
 </script>
 
 <template>
-  <section class="homeward-content-panel" aria-labelledby="clue-list-heading">
+  <section class="homeward-content-panel" aria-labelledby="clue-list-heading" :aria-busy="loading">
     <header class="homeward-panel-header">
       <div>
         <span class="homeward-eyebrow">访客线索</span>
         <h2 id="clue-list-heading">线索处理</h2>
         <p>先核实、再标记。敏感联系方式不要复制到公开区域。</p>
       </div>
-      <span class="homeward-queue-count"
-        >{{ clues.filter((item) => item.status === 'PENDING').length }} 条待处理</span
-      >
+      <span class="homeward-queue-count">{{ pendingCount }} 条待处理（全部线索）</span>
     </header>
 
     <div class="homeward-list-toolbar">
@@ -82,18 +75,23 @@ function updateKeyword(event: Event) {
         <button
           v-for="filter in filters"
           :key="filter.value"
+          :data-testid="`clue-filter-${filter.value}`"
           type="button"
           :class="{ 'is-active': statusFilter === filter.value }"
+          :aria-pressed="statusFilter === filter.value"
           @click="emit('update:statusFilter', filter.value)"
         >
           <span>{{ filter.label }}</span>
-          <small>{{ filterCount(filter.value) }}</small>
         </button>
       </div>
     </div>
 
-    <div v-if="filteredClues.length" class="homeward-clue-list">
-      <article v-for="item in filteredClues" :key="item.name" class="homeward-clue-row">
+    <div v-if="loading" class="homeward-loading-state" role="status">
+      <VLoading />
+      <p>正在加载线索…</p>
+    </div>
+    <div v-else-if="clues.length" class="homeward-clue-list">
+      <article v-for="item in clues" :key="item.name" class="homeward-clue-row">
         <div
           class="homeward-clue-state"
           :class="`is-${(item.status || 'PENDING').toLowerCase()}`"
@@ -136,9 +134,20 @@ function updateKeyword(event: Event) {
       </article>
     </div>
     <VEmpty
-      v-else
-      :title="statusFilter === 'ALL' ? '暂无线索' : '该状态下没有线索'"
+      v-else-if="!error"
+      :title="
+        keyword ? '没有找到匹配的线索' : statusFilter === 'ALL' ? '暂无线索' : '该状态下没有线索'
+      "
       description="访客提交的线索会出现在这里。"
+    />
+    <VPagination
+      v-if="!error"
+      data-testid="clue-pagination"
+      :page="page"
+      :size="size"
+      :total="total"
+      :size-options="[10, 30, 50]"
+      @change="emit('paginate', $event)"
     />
   </section>
 </template>
